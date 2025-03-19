@@ -1,0 +1,6 @@
+/target
+/temp_certif
+example_json_config copy.json
+example_json_config.json
+otp.json
+Cargo.lock
