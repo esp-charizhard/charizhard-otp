@@ -40,8 +40,8 @@ type ClientMap = HashMap<String, ClientData>;
 async fn main() {
     let tls_config = configure_server_tls("temp_certif/server.crt","temp_certif/server.key","temp_certif/ca.crt");
     let acceptor =TlsAcceptor::from(tls_config.clone());
-    let listener = TcpListener::bind("127.0.0.1:8443").await.unwrap();//TODO REPLACE DNS ?
-    println!("Serveur HTTPS en écoute sur https://127.0.0.1:8443");
+    let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();//TODO REPLACE DNS ?
+    println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
     loop {
         let (socket, _) = listener.accept().await.unwrap();
         if let Ok(mut tls_stream) = acceptor.accept(socket).await {
