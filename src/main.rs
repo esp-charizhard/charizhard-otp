@@ -1,27 +1,19 @@
-
+mod tls;
+use tls::utils::{configure_server_tls,extract_client_certificate};
 
 use hyper::StatusCode;
-use openssl::nid::Nid;
-use openssl::x509::X509;
-use rustls::server::WebPkiClientVerifier;
-use rustls::RootCertStore;
+
 use serde_json::{from_reader, json, to_writer_pretty, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_rustls::rustls::ServerConfig;
-use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
-use std::sync::Arc;
 use tokio::net::TcpListener;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls_pemfile::{certs, pkcs8_private_keys};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufWriter};
+use std::io::{BufReader, BufWriter};
 use urlencoding::encode;
 use serde::{Serialize, Deserialize};
-use openssl::sha::Sha256;
 use wireguard_keys::Privkey;
 
 #[derive(Serialize, Deserialize, Debug,Clone)]
@@ -233,90 +225,10 @@ async fn main() {
     }
 }
 }
-pub fn calculate_fingerprint(cert_bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();//NTM openssl
-    hasher.update(cert_bytes);
-    let result = hasher.finish();
-    result.iter().map(|b| format!("{:02x}", b)).collect::<String>()
-}
-
-pub fn configure_server_tls(cert_path: &str,key_path: &str,ca_cert_path: &str) -> Arc<ServerConfig>{
-    //println!("Configuring mTLS server");
-    let certs = load_certs(cert_path).expect("Erreur load_certs");
-    let ca_certs = load_certs(ca_cert_path).expect("Erreur load_certs pour CA");
-    let key = load_private_key(key_path).expect("Erreur load_private_key");
-    //println!("end load certifs/keys");
-    let mut client_auth_roots = RootCertStore::empty();
-    for cert in ca_certs {
-       client_auth_roots.add(cert).expect("Erreur ajout certificat CA");
-    }
-
-    let client_auth = WebPkiClientVerifier::builder(client_auth_roots.into())
-        .build()
-        .expect("Erreur création WebPkiClientVerifier");
-    
-    let config = ServerConfig::builder()
-       .with_client_cert_verifier(client_auth) //mTLS
-       .with_single_cert(certs, key)
-       .expect("Erreur configuration serveur TLS");
-    //config.set_client_cert_verifier(rustls::client::ServerCertVerifier::from(ca_certs));
-    Arc::new(config)
-}
-
-pub fn load_certs(path: &str) -> io::Result<Vec<CertificateDer<'static>>> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let certs: Vec<_> = certs(&mut reader).collect();
-    let certs = certs.into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid cert"))?;
-    Ok(certs.into_iter()
-        .map(CertificateDer::from)
-        .collect())
-}
-
-pub fn load_private_key(path: &str) -> io::Result<PrivateKeyDer<'static>> {
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
-    let keys: Vec<_> = pkcs8_private_keys(&mut reader).collect();
-    let keys = keys.into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key"))?;
-    let keys = keys.into_iter()
-        .map(PrivateKeyDer::from)
-        .collect::<Vec<_>>();
-    keys.into_iter()
-        .next()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no private key found"))
-}
 
 
-fn extract_client_certificate(tls_stream: &TlsStream<tokio::net::TcpStream>) -> Option<String> {
-    if let Some(certs) = tls_stream.get_ref().1.peer_certificates() {
-        if let Some(client_cert) = certs.first() {
-           // println!("Client certificate: {:?}", client_cert.as_ref());
-            let fingerprint = calculate_fingerprint(&client_cert.as_ref());
-            println!("Fingerprint: {}", fingerprint);
-            return Some(fingerprint);
-        }
-    }
-    None
-}
 
-#[allow(dead_code)]
-fn extract_client_subject(tls_stream: &TlsStream<tokio::net::TcpStream>) -> Option<String> {
-    if let Some(certs) = tls_stream.get_ref().1.peer_certificates() {
-        if let Some(client_cert) = certs.first() {
-            let cert = X509::from_der(client_cert.as_ref()).ok()?;
-            if let Some(subject) = cert.subject_name().entries_by_nid(Nid::COMMONNAME).next() {
-                let subject_value = subject.data().as_utf8().ok()?;
-                println!("Subject: {}", subject_value);
-                return Some(subject_value.to_string());
-            }
-        }
-    }
-    None
-}
+
 
 async fn load_and_parse_json(file_path: &str, id_client_x_value: &str) -> (StatusCode, String) {
     let file_result = async_fs::read_to_string(file_path).await;
