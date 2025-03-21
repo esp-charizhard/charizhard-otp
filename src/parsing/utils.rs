@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error, fs::{File, OpenOptions}, io::{BufReader, BufWriter}, path::Path};
 
 use hyper::StatusCode;
 use serde::{Serialize, Deserialize};
+use serde_json::{from_reader, to_writer_pretty, Value};
 use urlencoding::encode;
 
 #[derive(Serialize, Deserialize, Debug,Clone)]
@@ -84,4 +85,53 @@ pub fn create_urlencoded_data(client_data: &ClientData) -> String {
 
 
     encoded_data
+}
+
+pub fn list_ids_from_file(file_path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let json_data: Value = serde_json::from_reader(reader)?;
+    if let Value::Object(obj) = json_data {
+        let ids: Vec<String> = obj.keys().map(|k| k.to_string()).collect();
+        return Ok(ids);
+    }
+    Err("Le fichier JSON n'est pas un objet valide.".into())
+}
+
+pub fn find_x_header(headers: &HashMap<String, String>, header_name: &str) -> Option<String> {
+    headers.get(header_name).cloned()
+}
+
+pub fn get_attribute_value(file_path: &Path, id: &str, attribute: &str) -> Result<Option<Value>, Box<dyn Error>> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let json_data: Value = from_reader(reader)?;
+
+    if let Some(entry) = json_data.get(id) {
+        if let Some(value) = entry.get(attribute) {
+            return Ok(Some(value.clone()));
+        }
+    }
+
+    Ok(None) // L'attribut ou l'ID n'existe pas
+}
+
+pub fn update_json_attribute(file_path: &Path, id: &str, attribute: &str, new_value: Value) -> Result<(), Box<dyn Error>> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let mut json_data: Value = from_reader(reader)?;
+
+    if let Some(entry) = json_data.get_mut(id) {
+        if entry.get(attribute).is_some() {
+            entry[attribute] = new_value;
+
+            let file = OpenOptions::new().write(true).truncate(true).open(file_path)?;
+            let writer = BufWriter::new(file);
+            to_writer_pretty(writer, &json_data)?;
+
+            return Ok(());
+        }
+    }
+
+    Err("ID ou attribut non trouvé dans le fichier JSON.".into())
 }

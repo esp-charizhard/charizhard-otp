@@ -1,21 +1,18 @@
 mod tls;
 use tls::utils::{configure_server_tls,extract_client_certificate};
 mod parsing;
-use parsing::utils::load_and_parse_json;
+use parsing::utils::{list_ids_from_file,load_and_parse_json,find_x_header,get_attribute_value,update_json_attribute};
 use hyper::StatusCode;
 mod routes;
 use routes::utils::{create_http_response,get_route_path_and_headers};
-
-use serde_json::{from_reader, json, to_writer_pretty, Value};
+mod wireguard;
+use wireguard::utils::{append_wg_config,generate_config,remove_wg_config};
+use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio_rustls::TlsAcceptor;
-use std::collections::HashMap;
-use std::error::Error;
 use std::path::Path;
 use tokio::net::TcpListener;
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufReader, BufWriter};
-use wireguard_keys::Privkey;
+
 
 
 
@@ -225,93 +222,4 @@ fn is_string_in_id(ids: &Vec<String>, search_str: &str) -> bool {
 }
 
 
-fn find_x_header(headers: &HashMap<String, String>, header_name: &str) -> Option<String> {
-    headers.get(header_name).cloned()
-}
-fn list_ids_from_file(file_path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let json_data: Value = serde_json::from_reader(reader)?;
-    if let Value::Object(obj) = json_data {
-        let ids: Vec<String> = obj.keys().map(|k| k.to_string()).collect();
-        return Ok(ids);
-    }
-    Err("Le fichier JSON n'est pas un objet valide.".into())
-}
 
-fn get_attribute_value(file_path: &Path, id: &str, attribute: &str) -> Result<Option<Value>, Box<dyn Error>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let json_data: Value = from_reader(reader)?;
-
-    if let Some(entry) = json_data.get(id) {
-        if let Some(value) = entry.get(attribute) {
-            return Ok(Some(value.clone()));
-        }
-    }
-
-    Ok(None) // L'attribut ou l'ID n'existe pas
-}
-
-fn update_json_attribute(file_path: &Path, id: &str, attribute: &str, new_value: Value) -> Result<(), Box<dyn Error>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let mut json_data: Value = from_reader(reader)?;
-
-    if let Some(entry) = json_data.get_mut(id) {
-        if entry.get(attribute).is_some() {
-            entry[attribute] = new_value;
-
-            let file = OpenOptions::new().write(true).truncate(true).open(file_path)?;
-            let writer = BufWriter::new(file);
-            to_writer_pretty(writer, &json_data)?;
-
-            return Ok(());
-        }
-    }
-
-    Err("ID ou attribut non trouvé dans le fichier JSON.".into())
-}
-
-fn generate_config(fingerpint:String) -> serde_json::Value{
-    let private_key = Privkey::generate();
-    println!("Clé privée générée : {}", private_key.to_base64());
-    json!({
-        fingerpint: {
-            "address": "1.1.1.1",//TODO Dynamic IP change for each client
-            "port": "51820",
-            "privkey": private_key,
-            "pubkey": "nwkXWjc5q1NsGh6y9Y+1usPcbQzxYviNoqFG5Cl0tXI=",
-            "allowedip": "10.200.200.200",
-            "allowedmask": "255.255.255.254"
-        }
-    })
-}
-
-fn append_wg_config(file_path: &Path, config: Value) -> std::io::Result<()> {
-    let mut data = if file_path.exists() {
-        let file_content = fs::read_to_string(file_path)?;
-        serde_json::from_str::<Value>(&file_content).unwrap_or(json!({}))
-    } else {
-        json!({})
-    };
-    if let Some(client_id) = config.as_object() {
-        for (key, value) in client_id {
-            data[key] = value.clone(); // Merging or updating values
-        }
-    }
-    fs::write(file_path, serde_json::to_string_pretty(&config)?)
-}
-
-fn remove_wg_config(file_path: &Path, client_id: &str) -> std::io::Result<()> {
-    let mut data = if file_path.exists() {
-        let file_content = fs::read_to_string(file_path)?;
-        serde_json::from_str::<Value>(&file_content).unwrap_or(json!({}))
-    } else {
-        json!({})
-    };
-    if data.is_object() {
-        data.as_object_mut().unwrap().remove(client_id);
-    }
-    fs::write(file_path, serde_json::to_string_pretty(&data)?)
-}
