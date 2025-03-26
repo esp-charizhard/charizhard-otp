@@ -1,10 +1,10 @@
 mod tls;
 use tls::utils::{configure_server_tls,extract_client_certificate};
 mod parsing;
-use parsing::utils::{list_ids_from_file,load_and_parse_json,find_x_header,get_attribute_value,update_json_attribute};
+use parsing::utils::{find_x_header, generate_wg_json, get_attribute_value, list_ids_from_file, load_and_parse_json, update_json_attribute};
 use hyper::StatusCode;
 mod routes;
-use routes::utils::{create_http_response,get_route_path_and_headers};
+use routes::utils::{create_http_response,get_route_path_and_headers, send_request_server};
 mod wireguard;
 use wireguard::utils::{append_wg_config,generate_config,remove_wg_config};
 use serde_json::Value;
@@ -19,6 +19,7 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() {
+    //TODO MODIF how to get cert
     let tls_config = configure_server_tls("temp_certif/server.crt","temp_certif/server.key","temp_certif/ca.crt");
     let acceptor =TlsAcceptor::from(tls_config.clone());
     let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();//TODO REPLACE DNS ?
@@ -85,8 +86,20 @@ async fn main() {
                                             
                                                 let wg_config = generate_config(fingerprint);
                                                 println!("wg_config : {:?}", wg_config);
+                                                let json_to_send=generate_wg_json(&wg_config);
+                                                //println!("json_to_send : {:?}",json_to_send);
                                                 if let Err(e) = append_wg_config(Path::new("example_json_config.json"), wg_config) {
                                                     eprintln!("Erreur lors de l'écriture de la configuration WireGuard : {}", e);
+                                                    let response_bytes = create_http_response(
+                                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                                        "Erreur enrollement de l'otp",
+                                                    );
+                                                    if let Err(e) = tls_stream.write_all(&response_bytes).await {
+                                                        eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
+                                                    }
+                                                }
+                                                if let Err(e) = send_request_server("http://localhost:8081/add-peer", &json_to_send).await {
+                                                    eprintln!("Erreur lors de l'envoi de la requête : {}", e);
                                                     let response_bytes = create_http_response(
                                                         StatusCode::INTERNAL_SERVER_ERROR,
                                                         "Erreur enrollement de l'otp",

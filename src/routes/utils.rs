@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use hyper::StatusCode;
+use reqwest::Client;
 use tokio::io::AsyncReadExt;
 
 
@@ -89,4 +90,17 @@ fn parse_header(header_line: &str) -> Option<(String, String)> {
     } else {
         None
     }
+}
+
+pub async fn send_request_server(endpoint: &str, json_data: &str) -> Result<(), reqwest::Error> {
+    let client = Client::new();
+    println!("{}", json_data.to_string());
+    let response = client.post(endpoint)
+        .header("Content-Type", "application/json")
+        .body(json_data.to_string())
+        .send()
+        .await?;
+    
+    println!("Response status: {}", response.status());
+    Ok(())
 }

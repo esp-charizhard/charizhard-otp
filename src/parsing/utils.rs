@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fs::{File, OpenOptions}, io::{BufReader, BufWriter}, path::Path};
+use std::{collections::HashMap, error::Error, fs::{File, OpenOptions}, io::{BufReader, BufWriter}, net::Ipv4Addr, path::Path};
 
 use hyper::StatusCode;
 use serde::{Serialize, Deserialize};
@@ -15,6 +15,47 @@ pub struct ClientData {
     allowedmask: String, 
 }
 type ClientMap = HashMap<String, ClientData>;
+
+
+#[derive(Serialize, Deserialize)]
+struct WgConfigServer {
+    public_key: String,
+    allowed_ips: String,
+}
+
+fn mask_to_cidr(mask: &str) -> Option<u8> {
+    mask.parse::<Ipv4Addr>().ok().map(|ip| ip.octets().iter().fold(0, |acc, &b| acc + b.count_ones() as u8))
+}
+
+fn format_allowed_ip(ip: &str, mask: &str) -> String {
+    match mask_to_cidr(mask) {
+        Some(cidr) => format!("{}/{}", ip, cidr),
+        None => format!("{}/32", ip),
+    }
+}
+
+pub fn generate_wg_json(wg_config: &Value) -> String {
+    if let Some((_, inner_obj)) = wg_config.as_object().and_then(|obj| obj.iter().next()) {
+        let public_key = inner_obj.get("pubkey").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let allowed_ip = inner_obj.get("allowedip").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let allowed_mask = inner_obj.get("allowedmask").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        
+        let allowed_ips = if !allowed_ip.is_empty() && !allowed_mask.is_empty() {
+            format_allowed_ip(&allowed_ip, &allowed_mask)
+        } else {
+            "".to_string()
+        };
+
+        let config = WgConfigServer {
+            public_key,
+            allowed_ips,
+        };
+
+        return serde_json::to_string_pretty(&config).unwrap_or_else(|_| "{}".to_string());
+    }
+    "{}".to_string()
+}
+
 
 pub async fn load_and_parse_json(file_path: &str, id_client_x_value: &str) -> (StatusCode, String) {
     let file_result = async_fs::read_to_string(file_path).await;
