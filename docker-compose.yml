@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  charizhard-otp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./temp_certif:/app/temp_certif  
+      - ./example_json_config.json:/app/example_json_config.json  
+      - ./otp.json:/app/otp.json
+    ports:
+      - "8443:8443"

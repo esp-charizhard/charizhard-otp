@@ -12,6 +12,7 @@ use tokio::io::AsyncWriteExt;
 use tokio_rustls::TlsAcceptor;
 use std::path::Path;
 use tokio::net::TcpListener;
+use std::env;
 
 
 
@@ -24,6 +25,7 @@ async fn main() {
     let acceptor =TlsAcceptor::from(tls_config.clone());
     let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();//TODO REPLACE DNS ?
     println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
+    println!("Current working directory: {:?}", env::current_dir().unwrap());
     loop {
         let (socket, _) = listener.accept().await.unwrap();
         if let Ok(mut tls_stream) = acceptor.accept(socket).await {
@@ -34,7 +36,9 @@ async fn main() {
                     "/configwg" => {
                         if let Some(fingerprint) = extract_client_certificate(&tls_stream) {
                             //TODO MODIF BDD ?
+                            println!("before disaster");
                             let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
+                            println!("after disaster");
                             let response_bytes = create_http_response(status, &response_body);
 
                             // if let Some(subject) = extract_client_subject(&tls_stream) {

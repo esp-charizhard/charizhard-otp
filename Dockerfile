@@ -1,10 +1,9 @@
-
-FROM rust:latest as builder
+FROM rust:latest AS builder
 WORKDIR /app
 COPY . .
-RUN apt-get update && apt-get install -y musl-tools musl-dev build-essential libssl-dev pkg-config
-
-RUN rustup target add x86_64-unknown-linux-musl
 RUN cargo build --release
-EXPOSE 8443
-CMD ["/app/target/release/charizhard-otp"]
+
+FROM debian:bookworm-slim
+WORKDIR /app
+COPY --from=builder /app/target/release/charizhard-otp .
+CMD ["tail", "-f", "/dev/null"]
