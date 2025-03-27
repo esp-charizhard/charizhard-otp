@@ -6,4 +6,4 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 WORKDIR /app
 COPY --from=builder /app/target/release/charizhard-otp .
-CMD ["tail", "-f", "/dev/null"]
+CMD ["/app/charizhard-otp"]
