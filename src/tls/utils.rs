@@ -2,6 +2,7 @@ use openssl::sha::Sha256;
 use rustls::server::WebPkiClientVerifier;
 use rustls::RootCertStore;
 use rustls::ServerConfig;
+use rustls_pemfile::rsa_private_keys;
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use std::fs::File;
 use std::io::{self, BufReader};
@@ -48,16 +49,25 @@ fn load_certs(path: &str) -> io::Result<Vec<CertificateDer<'static>>> {
 fn load_private_key(path: &str) -> io::Result<PrivateKeyDer<'static>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
-    let keys: Vec<_> = pkcs8_private_keys(&mut reader).collect();
-    let keys = keys.into_iter()
+    let pkcs8_keys: Vec<_> = pkcs8_private_keys(&mut reader)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key"))?;
-    let keys = keys.into_iter()
-        .map(PrivateKeyDer::from)
-        .collect::<Vec<_>>();
-    keys.into_iter()
-        .next()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no private key found"))
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid PKCS#8 key"))?;
+    
+    if !pkcs8_keys.is_empty() {
+        return Ok(PrivateKeyDer::from(pkcs8_keys[0].clone_key()));
+    }
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    
+    let pkcs1_keys: Vec<_> = rsa_private_keys(&mut reader)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid PKCS#1 key"))?;
+    
+    if !pkcs1_keys.is_empty() {
+        return Ok(PrivateKeyDer::from(pkcs1_keys[0].clone_key()));
+    }
+    
+    Err(io::Error::new(io::ErrorKind::InvalidInput, "no private key found"))
 }
 
 pub fn calculate_fingerprint(cert_bytes: &[u8]) -> String {

@@ -20,7 +20,7 @@ use tokio::net::TcpListener;
 #[tokio::main]
 async fn main() {
     //TODO MODIF how to get cert
-    let tls_config = configure_server_tls("temp_certif/server.crt","temp_certif/server.key","temp_certif/ca.crt");
+    let tls_config = configure_server_tls("temp_certif/certif_charizhard.crt","temp_certif/key_charizhard.key","temp_certif/ca.crt");
     let acceptor =TlsAcceptor::from(tls_config.clone());
     let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();//TODO REPLACE DNS ?
     println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
