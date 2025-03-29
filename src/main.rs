@@ -36,9 +36,8 @@ async fn main() {
                     "/configwg" => {
                         if let Some(fingerprint) = extract_client_certificate(&tls_stream) {
                             //TODO MODIF BDD ?
-                            println!("before disaster");
+                            
                             let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
-                            println!("after disaster");
                             let response_bytes = create_http_response(status, &response_body);
 
                             // if let Some(subject) = extract_client_subject(&tls_stream) {
@@ -102,7 +101,7 @@ async fn main() {
                                                         eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
                                                     }
                                                 }
-                                                if let Err(e) = send_request_server("http://localhost:8081/add-peer", &json_to_send).await {
+                                                if let Err(e) = send_request_server("http://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await {//TODO MAYBE MODIF ENDPOINT
                                                     eprintln!("Erreur lors de l'envoi de la requête : {}", e);
                                                     let response_bytes = create_http_response(
                                                         StatusCode::INTERNAL_SERVER_ERROR,

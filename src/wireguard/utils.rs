@@ -9,12 +9,12 @@ pub fn generate_config(fingerpint:String) -> serde_json::Value{
     println!("Clé privée générée : {}", private_key.to_base64());
     json!({
         fingerpint: {
-            "address": "1.1.1.1",//TODO Dynamic IP change for each client
+            "address": "charizhard-wg.duckdns.org",//TODO Dynamic IP change for each client
             "port": "51820",
             "privkey": private_key,
             "pubkey": "nwkXWjc5q1NsGh6y9Y+1usPcbQzxYviNoqFG5Cl0tXI=",
-            "allowedip": "10.200.200.200",
-            "allowedmask": "255.255.255.254"
+            "allowedip": "192.168.200.2",
+            "allowedmask": "255.255.255.255"
         }
     })
 }
@@ -28,7 +28,7 @@ pub fn append_wg_config(file_path: &Path, config: Value) -> std::io::Result<()> 
     };
     if let Some(client_id) = config.as_object() {
         for (key, value) in client_id {
-            data[key] = value.clone(); // Merging or updating values
+            data[key] = value.clone(); 
         }
     }
     fs::write(file_path, serde_json::to_string_pretty(&config)?)
