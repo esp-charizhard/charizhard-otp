@@ -87,7 +87,7 @@ async fn main() {
                                         } else {
                                             println!("Mise à jour réussie !");
                                             
-                                                let wg_config = generate_config(fingerprint);
+                                                let wg_config = generate_config(fingerprint.clone());
                                                 println!("wg_config : {:?}", wg_config);
                                                 let json_to_send=generate_wg_json(&wg_config);
                                                 //println!("json_to_send : {:?}",json_to_send);
@@ -111,10 +111,8 @@ async fn main() {
                                                         eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
                                                     }
                                                 }
-                                                let response_bytes = create_http_response(
-                                                    StatusCode::OK,
-                                                    "enrollement ok",
-                                                );
+                                                let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
+                                                let response_bytes = create_http_response(status, &response_body);
                                                 if let Err(e) = tls_stream.write_all(&response_bytes).await {
                                                     eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
                                                 }
