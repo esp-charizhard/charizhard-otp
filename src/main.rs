@@ -56,29 +56,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 }
             };
-            if let Some((path, headers)) = get_route_path_and_headers(&mut tls_stream).await {
-                match path.as_str() {
-                    "/configwg" => {
-                        let _ = handle_configwg(&mut tls_stream).await;
-                    },
-                    "/otp" => {
-                        let _ = handle_otp(&mut tls_stream,&headers).await;
+            match get_route_path_and_headers(&mut tls_stream).await {
+                Some((path, headers)) => {
+                    match path.as_str() {
+                        "/configwg" => { let _ = handle_configwg(&mut tls_stream).await; },
+                        "/otp" => { let _ = handle_otp(&mut tls_stream, &headers).await; },
+                        "/reset" => { let _ = handle_reset(&mut tls_stream).await; },
+                        _ => {
+                            let response_bytes = create_http_response(StatusCode::NOT_FOUND, "Route non trouvée");
+                            let _ = tls_stream.write_all(&response_bytes).await;
+                        }
                     }
-                    "/reset" => {
-                        let _ = handle_reset(&mut tls_stream).await;
-                    }
-                    _ => {
-                        let response_bytes = create_http_response(
-                            StatusCode::NOT_FOUND,
-                            "Route non trouvée",
-                        );
-                        let _ = tls_stream.write_all(&response_bytes).await;
-                    }
-            };            
-        }
-        else{
-            println!("Connection mTLS failed!")
-        }
+                }
+                None => {
+                    eprintln!("Requête invalide : fermeture de la connexion");
+                }
+            }
     }
     );
     } 
