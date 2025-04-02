@@ -26,27 +26,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
     loop {
         let _permit = GLOBAL_SEM.acquire().await.unwrap();
-        let (socket, _) = listener.accept().await.unwrap();
-        if let Ok(mut tls_stream) = acceptor.accept(socket).await {
-            println!("Connection mTLS ok ! ");
-             
+        let (socket, _) = match listener.accept().await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Erreur d'acceptation: {}", e);
+                continue;
+            }
+        };
+        let acceptor = acceptor.clone();
+        tokio::spawn(async move {
+            let mut tls_stream = match acceptor.accept(socket).await {
+                Ok(s) => {
+                    println!("Connection mTLS ok !");
+                    s
+                },
+                Err(e) => {
+                    eprintln!("Échec TLS: {}", e);
+                    return;
+                }
+            };
             if let Some((path, headers)) = get_route_path_and_headers(&mut tls_stream).await {
                 match path.as_str() {
                     "/configwg" => {
-                        let _ = handle_configwg(&mut tls_stream).await?;
+                        let _ = handle_configwg(&mut tls_stream).await;
                     },
                     "/otp" => {
-                        let _ = handle_otp(&mut tls_stream,&headers).await?;
+                        let _ = handle_otp(&mut tls_stream,&headers).await;
                     }
                     "/reset" => {
-                        let _ = handle_reset(&mut tls_stream).await?;
+                        let _ = handle_reset(&mut tls_stream).await;
                     }
                     _ => {
                         let response_bytes = create_http_response(
                             StatusCode::NOT_FOUND,
                             "Route non trouvée",
                         );
-                        tls_stream.write_all(&response_bytes).await?;
+                        let _ = tls_stream.write_all(&response_bytes).await;
                     }
             };            
         }
@@ -54,8 +69,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Connection mTLS failed!")
         }
     }
+    );
+    } 
 }
-}
+
 
 
 async fn handle_configwg(stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>) -> Result<(), Box<dyn std::error::Error>> {
