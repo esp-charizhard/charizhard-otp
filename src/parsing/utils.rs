@@ -143,6 +143,7 @@ pub fn find_x_header(headers: &HashMap<String, String>, header_name: &str) -> Op
     headers.get(header_name).cloned()
 }
 
+#[allow(dead_code)]
 pub fn get_attribute_value(file_path: &Path, id: &str, attribute: &str) -> Result<Option<Value>, Box<dyn Error>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);

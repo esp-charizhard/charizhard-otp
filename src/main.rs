@@ -13,19 +13,25 @@ use tokio_rustls::TlsAcceptor;
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::net::TcpListener;
-use tokio::sync::Semaphore;
+use tokio::time::{timeout, Duration};
 
-static GLOBAL_SEM: Semaphore = Semaphore::const_new(10);
+
+const MAX_CONNECTIONS: usize = 10;
+
+lazy_static::lazy_static! {
+    static ref CONNECTION_SEM: tokio::sync::Semaphore = tokio::sync::Semaphore::new(MAX_CONNECTIONS);
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //TODO MODIF how to get cert
+    
     let tls_config = configure_server_tls("temp_certif/certif_charizhard.crt","temp_certif/key_charizhard.key","temp_certif/ca.crt");
     let acceptor =TlsAcceptor::from(tls_config.clone());
     let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();
     println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
     loop {
-        let _permit = GLOBAL_SEM.acquire().await.unwrap();
+        let permit = CONNECTION_SEM.acquire().await.unwrap();
         let (socket, _) = match listener.accept().await {
             Ok(s) => s,
             Err(e) => {
@@ -35,13 +41,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         let acceptor = acceptor.clone();
         tokio::spawn(async move {
-            let mut tls_stream = match acceptor.accept(socket).await {
-                Ok(s) => {
-                    println!("Connection mTLS ok !");
+            let _permit = permit;
+            let mut tls_stream = match timeout(Duration::from_secs(3), acceptor.accept(socket)).await {
+                Ok(Ok(s)) => {
+                    println!("Connexion mTLS réussie !");
                     s
                 },
-                Err(e) => {
+                Ok(Err(e)) => {
                     eprintln!("Échec TLS: {}", e);
+                    return;
+                }
+                Err(_) => {
+                    eprintln!("Timeout TLS !");
                     return;
                 }
             };
@@ -87,11 +98,11 @@ async fn handle_configwg(stream: &mut tokio_rustls::server::TlsStream<tokio::net
 }
 
 async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,headers: &HashMap<String, String>) -> Result<(), Box<dyn std::error::Error>> {
-    let (otp_value, mail_value) = match (find_x_header(&headers, "otp"), find_x_header(&headers, "mail")) {
+    let (otp_value, _mail_value) = match (find_x_header(&headers, "otp"), find_x_header(&headers, "mail")) {//TODO Remettre le mail_value
         (Some(o), Some(m)) => (o, m),
         _ => {
             send_error_response(stream, StatusCode::BAD_REQUEST, "Missing OTP or Mail header").await?;
-            return Ok(()); // Erreur déjà gérée
+            return Ok(()); 
         }
     };
 
@@ -104,7 +115,7 @@ async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::Tcp
     let fingerprint = extract_client_certificate(stream)
         .ok_or("Client certificate extraction failed")?;
 
-    // Process OTP validation and WireGuard config generation
+
     update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone()))?;
     
     let wg_config = generate_config(fingerprint.clone());
