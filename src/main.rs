@@ -1,7 +1,7 @@
 mod tls;
 use tls::utils::{configure_server_tls,extract_client_certificate};
 mod parsing;
-use parsing::utils::{find_x_header, generate_wg_json, get_attribute_value, list_ids_from_file, load_and_parse_json, update_json_attribute};
+use parsing::utils::{find_x_header, generate_wg_json, list_ids_from_file, load_and_parse_json, update_json_attribute};
 use hyper::StatusCode;
 mod routes;
 use routes::utils::{create_http_response,get_route_path_and_headers, send_request_server};
@@ -10,6 +10,7 @@ use wireguard::utils::{append_wg_config,generate_config,remove_wg_config};
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio_rustls::TlsAcceptor;
+use std::collections::HashMap;
 use std::path::Path;
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
@@ -32,154 +33,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some((path, headers)) = get_route_path_and_headers(&mut tls_stream).await {
                 match path.as_str() {
                     "/configwg" => {
-                        if let Some(fingerprint) = extract_client_certificate(&tls_stream) {
-                            //TODO MODIF BDD ?
-                            
-                            let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
-                            let response_bytes = create_http_response(status, &response_body);
-
-                            // if let Some(subject) = extract_client_subject(&tls_stream) {
-                            //     println!("Le subject du certificat est : {}", subject);
-                            // } else {
-                            //     println!("Aucun certificat client ou subject non trouvé.");
-                            // }//SI BESOIN
-
-                            tls_stream.write_all(&response_bytes).await?;
-                        } else {
-                            println!("Erreur lors de l'extraction du certificat du client");
-                            let response_bytes = create_http_response(
-                                StatusCode::FORBIDDEN,
-                                "Erreur lors de l'extraction du certificat du client",
-                            );
-                            tls_stream.write_all(&response_bytes).await?;
-                        }
+                        let _ = handle_configwg(&mut tls_stream).await?;
                     },
                     "/otp" => {
-                        if let (Some(otp_value), Some(mail_value)) = (find_x_header(&headers, "otp"), find_x_header(&headers, "mail")) {
-                            println!("Headers trouvés : otp = {}, mail = {}", otp_value, mail_value);
-                            let ids = match list_ids_from_file(Path::new("otp.json")) {
-                                Ok(ids) => ids,
-                                Err(e) => {
-                                    println!("Erreur : {}", e);
-                                    vec![]
-                                }
-                            };
-                            if is_string_in_id(&ids, &otp_value) {
-                                match (get_attribute_value(Path::new("otp.json"), &otp_value, "mail"), get_attribute_value(Path::new("otp.json"), &otp_value, "is_set")) {
-                                    (Ok(Some(mail_db_value)), Ok(Some(is_set_value))) if mail_db_value == mail_value && is_set_value == 0 => {
-                                        println!("MAIL + OTP OK");
-                                        if let Some(fingerprint) = extract_client_certificate(&tls_stream) {
-                                        if let Err(e) = update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone())) {
-                                            eprintln!("Erreur lors de la mise à jour du JSON : {}", e);
-                                            let response_bytes = create_http_response(
-                                                StatusCode::INTERNAL_SERVER_ERROR,
-                                                "Erreur enrollement de l'otp",
-                                            );
-                                            tls_stream.write_all(&response_bytes).await?;
-                                        } else {
-                                            println!("Mise à jour réussie !");
-                                            
-                                                let wg_config = generate_config(fingerprint.clone());
-                                                println!("wg_config : {:?}", wg_config);
-                                                let json_to_send=generate_wg_json(&wg_config);
-                                                //println!("json_to_send : {:?}",json_to_send);
-                                                if let Err(e) = append_wg_config(Path::new("example_json_config.json"), wg_config) {
-                                                    eprintln!("Erreur lors de l'écriture de la configuration WireGuard : {}", e);
-                                                    let response_bytes = create_http_response(
-                                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                                        "Erreur enrollement de l'otp",
-                                                    );
-                                                    tls_stream.write_all(&response_bytes).await?;
-                                                }
-                                                if let Err(e) = send_request_server("http://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await {//TODO MAYBE MODIF ENDPOINT
-                                                    eprintln!("Erreur lors de l'envoi de la requête : {}", e);
-                                                    let response_bytes = create_http_response(
-                                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                                        "Erreur enrollement de l'otp",
-                                                    );
-                                                    tls_stream.write_all(&response_bytes).await?;
-                                                }
-                                                let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
-                                                let response_bytes = create_http_response(status, &response_body);
-                                                tls_stream.write_all(&response_bytes).await?;
-                                             
-                                        
-                                        }
-                                        
-                                    }
-                                }
-                                    _ => {
-                                        let response_bytes = create_http_response(
-                                            StatusCode::FORBIDDEN,
-                                            "Erreur recherche bdd",
-                                        );
-                                        tls_stream.write_all(&response_bytes).await?;
-                                    }
-                                }
-                            }
-                            else {
-                                println!("non trouvé dans le fichier JSON.");
-                                let response_bytes = create_http_response(
-                                    StatusCode::FORBIDDEN,
-                                    "Erreur recherche bdd",
-                                );
-                                tls_stream.write_all(&response_bytes).await?;
-                            }
-                            let response_bytes = create_http_response(
-                                StatusCode::NOT_IMPLEMENTED,
-                                "NOT_IMPLEMENTED YET",
-                            );
-                            tls_stream.write_all(&response_bytes).await?;
-                        } else {
-                            println!("Header 'otp' ou 'mail' non trouvé");
-                            let response_bytes = create_http_response(
-                                StatusCode::FORBIDDEN,
-                                "header error",
-                            );
-                            tls_stream.write_all(&response_bytes).await?;
-                        }
+                        let _ = handle_otp(&mut tls_stream,&headers).await?;
                     }
                     "/reset" => {
-                        if let Some(fingerprint) = extract_client_certificate(&tls_stream) {
-                            let ids = match list_ids_from_file(Path::new("example_json_config.json")) {
-                                Ok(ids) => ids,
-                                Err(e) => {
-                                    println!("Erreur : {}", e);
-                                    vec![]
-                                }
-                            };
-                            if is_string_in_id(&ids, &fingerprint) {
-                                println!("trouvé dans le fichier JSON !");
-                                if let Err(e) = remove_wg_config(Path::new("example_json_config.json"), &fingerprint) {
-                                    println!("Erreur lors de la suppression de la config : {}", e);
-                                    let response_bytes = create_http_response(
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Erreur suppression config",
-                                    );
-                                    tls_stream.write_all(&response_bytes).await?;
-                                }
-                                let response_bytes = create_http_response(
-                                    StatusCode::OK,
-                                    "config wipe",
-                                );
-                                tls_stream.write_all(&response_bytes).await?;
-                            } else {
-                                println!("non trouvé dans le fichier JSON.");
-                                let response_bytes = create_http_response(
-                                    StatusCode::FORBIDDEN,
-                                    "Erreur recherche bdd",
-                                );
-                                tls_stream.write_all(&response_bytes).await?;
-                            }
-                        }
-                        else{
-                            println!("Erreur lors de l'extraction du certificat du client");
-                            let response_bytes = create_http_response(
-                                StatusCode::FORBIDDEN,
-                                "Erreur lors de l'extraction du certificat du client",
-                            );
-                            tls_stream.write_all(&response_bytes).await?;
-                        }
+                        let _ = handle_reset(&mut tls_stream).await?;
                     }
                     _ => {
                         let response_bytes = create_http_response(
@@ -198,7 +58,101 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 
+async fn handle_configwg(stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>) -> Result<(), Box<dyn std::error::Error>> {
+    let fingerprint = extract_client_certificate(stream)
+        .ok_or("Client certificate extraction failed")?;
 
+    let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
+    let response_bytes = create_http_response(status, &response_body);
+
+    stream.write_all(&response_bytes).await?;
+    Ok(())
+}
+
+async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,headers: &HashMap<String, String>) -> Result<(), Box<dyn std::error::Error>> {
+    let (otp_value, mail_value) = match (find_x_header(&headers, "otp"), find_x_header(&headers, "mail")) {
+        (Some(o), Some(m)) => (o, m),
+        _ => {
+            send_error_response(stream, StatusCode::BAD_REQUEST, "Missing OTP or Mail header").await?;
+            return Ok(()); // Erreur déjà gérée
+        }
+    };
+
+    let ids = list_ids_from_file(Path::new("otp.json"))?;
+    if !is_string_in_id(&ids, &otp_value) {
+        send_error_response(stream, StatusCode::FORBIDDEN, "Invalid OTP").await?;
+        return Ok(());
+    }
+
+    let fingerprint = extract_client_certificate(stream)
+        .ok_or("Client certificate extraction failed")?;
+
+    // Process OTP validation and WireGuard config generation
+    update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone()))?;
+    
+    let wg_config = generate_config(fingerprint.clone());
+    append_wg_config(Path::new("example_json_config.json"), wg_config.clone())?;
+    
+    let json_to_send = generate_wg_json(&wg_config);
+    send_request_server("http://wg-server:8081/add-peer", &json_to_send).await?;
+
+    let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
+    let response_bytes = create_http_response(status, &response_body);
+    stream.write_all(&response_bytes).await?;
+
+    Ok(())
+}
+
+
+async fn send_error_response(stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>, status: StatusCode, message: &str) -> Result<(), std::io::Error> {
+    let response = create_http_response(status, message);
+    stream.write_all(&response).await
+}
+
+async fn handle_reset(tls_stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(fingerprint) = extract_client_certificate(&tls_stream) {
+        let ids = match list_ids_from_file(Path::new("example_json_config.json")) {
+            Ok(ids) => ids,
+            Err(e) => {
+                println!("Erreur : {}", e);
+                vec![]
+            }
+        };
+        if is_string_in_id(&ids, &fingerprint) {
+            println!("trouvé dans le fichier JSON !");
+            if let Err(e) = remove_wg_config(Path::new("example_json_config.json"), &fingerprint) {
+                println!("Erreur lors de la suppression de la config : {}", e);
+                let response_bytes = create_http_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Erreur suppression config",
+                );
+                tls_stream.write_all(&response_bytes).await?;
+            }
+            let response_bytes = create_http_response(
+                StatusCode::OK,
+                "config wipe",
+            );
+            tls_stream.write_all(&response_bytes).await?;
+        } else {
+            println!("non trouvé dans le fichier JSON.");
+            let response_bytes = create_http_response(
+                StatusCode::FORBIDDEN,
+                "Erreur recherche bdd",
+            );
+            tls_stream.write_all(&response_bytes).await?;
+        }
+    }
+    else{
+        
+        println!("Erreur lors de l'extraction du certificat du client");
+        let response_bytes = create_http_response(
+            StatusCode::FORBIDDEN,
+            "Erreur lors de l'extraction du certificat du client",
+        );
+        tls_stream.write_all(&response_bytes).await?;
+    }
+    Ok(())
+}
 fn is_string_in_id(ids: &Vec<String>, search_str: &str) -> bool {
     ids.iter().any(|id| id == search_str)
 }
