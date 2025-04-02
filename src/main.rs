@@ -12,21 +12,19 @@ use tokio::io::AsyncWriteExt;
 use tokio_rustls::TlsAcceptor;
 use std::path::Path;
 use tokio::net::TcpListener;
-use std::env;
+use tokio::sync::Semaphore;
 
-
-
-
+static GLOBAL_SEM: Semaphore = Semaphore::const_new(10);
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //TODO MODIF how to get cert
     let tls_config = configure_server_tls("temp_certif/certif_charizhard.crt","temp_certif/key_charizhard.key","temp_certif/ca.crt");
     let acceptor =TlsAcceptor::from(tls_config.clone());
-    let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();//TODO REPLACE DNS ?
+    let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();
     println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
-    println!("Current working directory: {:?}", env::current_dir().unwrap());
     loop {
+        let _permit = GLOBAL_SEM.acquire().await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();
         if let Ok(mut tls_stream) = acceptor.accept(socket).await {
             println!("Connection mTLS ok ! ");
@@ -46,18 +44,14 @@ async fn main() {
                             //     println!("Aucun certificat client ou subject non trouvé.");
                             // }//SI BESOIN
 
-                            if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                            }
+                            tls_stream.write_all(&response_bytes).await?;
                         } else {
                             println!("Erreur lors de l'extraction du certificat du client");
                             let response_bytes = create_http_response(
                                 StatusCode::FORBIDDEN,
                                 "Erreur lors de l'extraction du certificat du client",
                             );
-                            if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                            }
+                            tls_stream.write_all(&response_bytes).await?;
                         }
                     },
                     "/otp" => {
@@ -81,9 +75,7 @@ async fn main() {
                                                 StatusCode::INTERNAL_SERVER_ERROR,
                                                 "Erreur enrollement de l'otp",
                                             );
-                                            if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                                eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                            }
+                                            tls_stream.write_all(&response_bytes).await?;
                                         } else {
                                             println!("Mise à jour réussie !");
                                             
@@ -97,9 +89,7 @@ async fn main() {
                                                         StatusCode::INTERNAL_SERVER_ERROR,
                                                         "Erreur enrollement de l'otp",
                                                     );
-                                                    if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                                        eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                                    }
+                                                    tls_stream.write_all(&response_bytes).await?;
                                                 }
                                                 if let Err(e) = send_request_server("http://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await {//TODO MAYBE MODIF ENDPOINT
                                                     eprintln!("Erreur lors de l'envoi de la requête : {}", e);
@@ -107,15 +97,11 @@ async fn main() {
                                                         StatusCode::INTERNAL_SERVER_ERROR,
                                                         "Erreur enrollement de l'otp",
                                                     );
-                                                    if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                                        eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                                    }
+                                                    tls_stream.write_all(&response_bytes).await?;
                                                 }
                                                 let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
                                                 let response_bytes = create_http_response(status, &response_body);
-                                                if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                                    eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                                }
+                                                tls_stream.write_all(&response_bytes).await?;
                                              
                                         
                                         }
@@ -127,9 +113,7 @@ async fn main() {
                                             StatusCode::FORBIDDEN,
                                             "Erreur recherche bdd",
                                         );
-                                        if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                            eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                        }
+                                        tls_stream.write_all(&response_bytes).await?;
                                     }
                                 }
                             }
@@ -139,26 +123,20 @@ async fn main() {
                                     StatusCode::FORBIDDEN,
                                     "Erreur recherche bdd",
                                 );
-                                if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                    eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                }
+                                tls_stream.write_all(&response_bytes).await?;
                             }
                             let response_bytes = create_http_response(
                                 StatusCode::NOT_IMPLEMENTED,
                                 "NOT_IMPLEMENTED YET",
                             );
-                            if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                            }
+                            tls_stream.write_all(&response_bytes).await?;
                         } else {
                             println!("Header 'otp' ou 'mail' non trouvé");
                             let response_bytes = create_http_response(
                                 StatusCode::FORBIDDEN,
                                 "header error",
                             );
-                            if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                            }
+                            tls_stream.write_all(&response_bytes).await?;
                         }
                     }
                     "/reset" => {
@@ -178,26 +156,20 @@ async fn main() {
                                         StatusCode::INTERNAL_SERVER_ERROR,
                                         "Erreur suppression config",
                                     );
-                                    if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                        eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                    }
+                                    tls_stream.write_all(&response_bytes).await?;
                                 }
                                 let response_bytes = create_http_response(
                                     StatusCode::OK,
                                     "config wipe",
                                 );
-                                if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                    eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                }
+                                tls_stream.write_all(&response_bytes).await?;
                             } else {
                                 println!("non trouvé dans le fichier JSON.");
                                 let response_bytes = create_http_response(
                                     StatusCode::FORBIDDEN,
                                     "Erreur recherche bdd",
                                 );
-                                if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                    eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                                }
+                                tls_stream.write_all(&response_bytes).await?;
                             }
                         }
                         else{
@@ -206,9 +178,7 @@ async fn main() {
                                 StatusCode::FORBIDDEN,
                                 "Erreur lors de l'extraction du certificat du client",
                             );
-                            if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                                eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                            }
+                            tls_stream.write_all(&response_bytes).await?;
                         }
                     }
                     _ => {
@@ -216,9 +186,7 @@ async fn main() {
                             StatusCode::NOT_FOUND,
                             "Route non trouvée",
                         );
-                        if let Err(e) = tls_stream.write_all(&response_bytes).await {
-                            eprintln!("Erreur lors de l'envoi de la réponse : {}", e);
-                        }
+                        tls_stream.write_all(&response_bytes).await?;
                     }
             };            
         }

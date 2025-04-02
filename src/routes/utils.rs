@@ -104,3 +104,5 @@ pub async fn send_request_server(endpoint: &str, json_data: &str) -> Result<(), 
     println!("Response status: {}", response.status());
     Ok(())
 }
+
+
