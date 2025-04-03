@@ -4,3 +4,8 @@ example_json_config copy.json
 example_json_config.json
 otp.json
 Cargo.lock
+charizhard-otp-cm0-configmap.yaml
+charizhard-otp-cm1-configmap.yaml
+charizhard-otp-cm2-configmap.yaml
+charizhard-otp-deployment.yaml
+charizhard-otp-service.yaml

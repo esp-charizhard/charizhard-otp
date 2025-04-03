@@ -24,11 +24,14 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    //TODO MODIF how to get cert
+    println!("CECI EST LE PREMIER LOG");
     
     let tls_config = configure_server_tls("temp_certif/certif_charizhard.crt","temp_certif/key_charizhard.key","temp_certif/ca.crt");
+    println!("CECI EST LE DEUXIEME LOG");
     let acceptor =TlsAcceptor::from(tls_config.clone());
+    println!("CECI EST LE TROISIEME LOG");
     let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();
+    println!("CECI EST LE QUATRIEME LOG");
     println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
     loop {
         let permit = CONNECTION_SEM.acquire().await.unwrap();
