@@ -159,20 +159,34 @@ pub fn get_attribute_value(file_path: &Path, id: &str, attribute: &str) -> Resul
 }
 
 pub fn update_json_attribute(file_path: &Path, id: &str, attribute: &str, new_value: Value) -> Result<(), Box<dyn Error>> {
+
+    println!("Opening file '{}' to update attribute '{}' of ID '{}' to value '{:?}'", file_path.display(), attribute, id, new_value);
+
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
     let mut json_data: Value = from_reader(reader)?;
 
+    println!("JSON data loaded from file: {:#?}", json_data);
+
     if let Some(entry) = json_data.get_mut(id) {
+        println!("Entry found for ID '{}'", id);
+
         if entry.get(attribute).is_some() {
+            println!("Updating attribute '{}' to value '{:?}'", attribute, new_value);
             entry[attribute] = new_value;
 
+            println!("Writing updated JSON data to file...");
             let file = OpenOptions::new().write(true).truncate(true).open(file_path)?;
             let writer = BufWriter::new(file);
             to_writer_pretty(writer, &json_data)?;
 
+            println!("Updated JSON data written to file.");
             return Ok(());
+        } else {
+            println!("Attribute '{}' not found for ID '{}'", attribute, id);
         }
+    } else {
+        println!("ID '{}' not found in JSON data.", id);
     }
 
     Err("ID ou attribut non trouvé dans le fichier JSON.".into())
