@@ -91,6 +91,7 @@ async fn handle_configwg(stream: &mut tokio_rustls::server::TlsStream<tokio::net
 }
 
 async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,headers: &HashMap<String, String>) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Handling OTP");
     let (otp_value, _mail_value) = match (find_x_header(&headers, "otp"), find_x_header(&headers, "mail")) {//TODO Remettre le mail_value
         (Some(o), Some(m)) => (o, m),
         _ => {
@@ -98,25 +99,25 @@ async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::Tcp
             return Ok(()); 
         }
     };
-
+    println!("Verif header ok");
     let ids = list_ids_from_file(Path::new("otp.json"))?;
     if !is_string_in_id(&ids, &otp_value) {
         send_error_response(stream, StatusCode::FORBIDDEN, "Invalid OTP").await?;
         return Ok(());
     }
-
+    println!("Verif OTP ok");
     let fingerprint = extract_client_certificate(stream)
         .ok_or("Client certificate extraction failed")?;
-
-
-    update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone()))?;
+    println!("Fingerprint ok");
     
+    update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone()))?;
+    println!("modified is_set from json");
     let wg_config = generate_config(fingerprint.clone());
     append_wg_config(Path::new("example_json_config.json"), wg_config.clone())?;
-    
+    println!("appended is_set from json");
     let json_to_send = generate_wg_json(&wg_config);
-    // send_request_server("http://charizhard-wg-server:8081/add-peer", &json_to_send).await?;
-
+    // send_request_server("http://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await?;
+    println!("Sending config");
     let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
     let response_bytes = create_http_response(status, &response_body);
     stream.write_all(&response_bytes).await?;
