@@ -7,12 +7,12 @@ use urlencoding::encode;
 
 #[derive(Serialize, Deserialize, Debug,Clone)]
 pub struct ClientData {
-    address: String,
-    port: String,
-    privkey: String,
-    pubkey: String,
-    allowedip: String,
-    allowedmask: String, 
+    pub(crate) address: String,
+    pub(crate) port: String,
+    pub(crate) privkey: String,
+    pub(crate) pubkey: String,
+    pub(crate) allowedip: String,
+    pub(crate) allowedmask: String, 
 }
 type ClientMap = HashMap<String, ClientData>;
 
