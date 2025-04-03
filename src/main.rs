@@ -47,8 +47,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
                 Ok(Err(e)) => {
                     eprintln!("Échec TLS: {}", e);
-                    let response_bytes = create_http_response(StatusCode::INTERNAL_SERVER_ERROR, "Erreur mTLS");
-                    let _ = tls_stream.write_all(&response_bytes).await;
+                    // let response_bytes = create_http_response(StatusCode::INTERNAL_SERVER_ERROR, "Erreuyr");
+                    // let _ = tls_stream.write_all(&response_bytes).await;
                     return;
                 }
                 Err(_) => {
@@ -115,7 +115,7 @@ async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::Tcp
     append_wg_config(Path::new("example_json_config.json"), wg_config.clone())?;
     
     let json_to_send = generate_wg_json(&wg_config);
-    send_request_server("http://wg-server:8081/add-peer", &json_to_send).await?;
+    // send_request_server("http://charizhard-wg-server:8081/add-peer", &json_to_send).await?;
 
     let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
     let response_bytes = create_http_response(status, &response_body);
