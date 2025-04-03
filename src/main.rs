@@ -110,10 +110,10 @@ async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::Tcp
         .ok_or("Client certificate extraction failed")?;
     println!("Fingerprint ok");
     
-    update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone()))?;
+    // update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone()))?;
     println!("modified is_set from json");
     let wg_config = generate_config(fingerprint.clone());
-    append_wg_config(Path::new("example_json_config.json"), wg_config.clone())?;
+    // append_wg_config(Path::new("example_json_config.json"), wg_config.clone())?;
     println!("appended is_set from json");
     let json_to_send = generate_wg_json(&wg_config);
     // send_request_server("http://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await?;
