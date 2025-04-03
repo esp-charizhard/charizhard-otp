@@ -24,14 +24,9 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("CECI EST LE PREMIER LOG");
-    
     let tls_config = configure_server_tls("temp_certif/certif_charizhard.crt","temp_certif/key_charizhard.key","temp_certif/ca.crt");
-    println!("CECI EST LE DEUXIEME LOG");
     let acceptor =TlsAcceptor::from(tls_config.clone());
-    println!("CECI EST LE TROISIEME LOG");
     let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();
-    println!("CECI EST LE QUATRIEME LOG");
     println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
     loop {
         let permit = CONNECTION_SEM.acquire().await.unwrap();
@@ -52,6 +47,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
                 Ok(Err(e)) => {
                     eprintln!("Échec TLS: {}", e);
+                    let response_bytes = create_http_response(StatusCode::INTERNAL_SERVER_ERROR, "Erreur mTLS");
+                    let _ = tls_stream.write_all(&response_bytes).await;
                     return;
                 }
                 Err(_) => {
