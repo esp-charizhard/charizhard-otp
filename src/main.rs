@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use tokio::net::TcpListener;
 use tokio::time::{timeout, Duration};
-use parsing::utils::ClientData;
 
 
 const MAX_CONNECTIONS: usize = 10;
@@ -111,42 +110,18 @@ async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::Tcp
         .ok_or("Client certificate extraction failed")?;
     println!("Fingerprint ok");
     
-    // update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone()))?;
+    update_json_attribute(Path::new("otp.json"), &otp_value, "is_set", Value::from(fingerprint.clone()))?;
     println!("modified is_set from json");
     let wg_config = generate_config(fingerprint.clone());
     println!("wg_config JSON: {}", wg_config);
 
-    let client_data_json = wg_config.get(fingerprint.clone()).and_then(Value::as_object);
-
-    let client_data = if let Some(data) = client_data_json {
-        ClientData {
-            address: data.get("address").and_then(Value::as_str).unwrap_or("").to_string(),
-            port: data.get("port").and_then(Value::as_str).unwrap_or("").to_string(),
-            privkey: data.get("privkey").and_then(Value::as_str).unwrap_or("").to_string(),
-            pubkey: data.get("pubkey").and_then(Value::as_str).unwrap_or("").to_string(),
-            allowedip: data.get("allowedip").and_then(Value::as_str).unwrap_or("").to_string(),
-            allowedmask: data.get("allowedmask").and_then(Value::as_str).unwrap_or("").to_string(),
-        }
-    }else {
-        println!("Erreur: Impossible de trouver les données pour le fingerprint {}", fingerprint);
-        ClientData {
-            address: "".to_string(),
-            port: "".to_string(),
-            privkey: "".to_string(),
-            pubkey: "".to_string(),
-            allowedip: "".to_string(),
-            allowedmask: "".to_string(),
-        }
-    };
-    let encoded_config = create_urlencoded_data(&client_data);
-    println!("Encoded config: {}", encoded_config);
-    // append_wg_config(Path::new("example_json_config.json"), wg_config.clone())?;
+    append_wg_config(Path::new("example_json_config.json"), wg_config.clone())?;
     println!("appended is_set from json");
-    //let json_to_send = generate_wg_json(&wg_config);
-    // send_request_server("http://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await?;
+    let json_to_send = generate_wg_json(&wg_config);
+    //send_request_server("https://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await?;
     println!("Sending config");
     let (status, response_body) = load_and_parse_json("example_json_config.json", &fingerprint).await;
-    let response_bytes = create_http_response(status, &encoded_config);
+    let response_bytes = create_http_response(status, &response_body);
     stream.write_all(&response_bytes).await?;
 
     Ok(())
