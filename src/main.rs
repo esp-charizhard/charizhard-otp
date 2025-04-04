@@ -115,7 +115,10 @@ async fn handle_otp(stream: &mut tokio_rustls::server::TlsStream<tokio::net::Tcp
     let wg_config = generate_config(fingerprint.clone());
     println!("wg_config JSON: {}", wg_config);
 
-    append_wg_config(Path::new("example_json_config.json"), wg_config.clone())?;
+    match append_wg_config(Path::new("example_json_config.json"), wg_config.clone()) {
+        Ok(_) => println!("Configuration ajoutée avec succès."),
+        Err(e) => eprintln!("Erreur lors de l'ajout de la configuration: {}", e),
+    }    
     println!("appended is_set from json");
     let json_to_send = generate_wg_json(&wg_config);
     //send_request_server("https://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await?;
