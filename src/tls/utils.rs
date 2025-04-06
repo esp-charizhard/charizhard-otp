@@ -37,10 +37,6 @@ pub fn configure_server_tls(
         .with_client_cert_verifier(client_auth)
         .with_single_cert(certs, key)
         .expect("Erreur configuration serveur TLS");
-    
-    for suite in config.crypto_provider().cipher_suites.clone() {
-        println!("{:#?}", suite);
-    }
 
     Arc::new(config)
 }
