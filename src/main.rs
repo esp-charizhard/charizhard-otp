@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(async move {
             let _permit = permit;
             let mut tls_stream =
-                match timeout(Duration::from_secs(3), acceptor.accept(socket)).await {
+                match timeout(Duration::from_secs(20), acceptor.accept(socket)).await {
                     Ok(Ok(s)) => {
                         println!("Connexion mTLS réussie !");
                         s
