@@ -8,7 +8,7 @@ pub fn generate_config(fingerpint: String) -> serde_json::Value {
     println!("Clé privée générée : {}", private_key.to_base64());
     json!({
         fingerpint: {
-            "address": "charizhard-wg.duckdns.org",//TODO Dynamic IP change for each client
+            "address": "44.204.172.118",//TODO Dynamic IP change for each client
             "port": "51820",
             "privkey": "kJ09fiJcmyEBIjPkAOEnP2xDXA5X2NrmlYql/duqnHI=",
             "pubkey": "nwkXWjc5q1NsGh6y9Y+1usPcbQzxYviNoqFG5Cl0tXI=",
