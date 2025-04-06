@@ -22,6 +22,10 @@ pub fn configure_server_tls(
     let ca_certs = load_certs(ca_cert_path).expect("Erreur load_certs pour CA");
     let key = load_private_key(key_path).expect("Erreur load_private_key");
 
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     let mut client_auth_roots = RootCertStore::empty();
     for cert in ca_certs {
         client_auth_roots
