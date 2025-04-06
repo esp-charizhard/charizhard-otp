@@ -29,6 +29,7 @@ pub fn configure_server_tls(cert_path: &str, key_path: &str, ca_cert_path: &str)
     let config = ServerConfig::builder()
         .with_client_cert_verifier(client_auth)
         .with_single_cert(certs, key)
+        .
         .expect("Erreur configuration serveur TLS");
 
     Arc::new(config)
