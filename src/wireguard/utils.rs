@@ -1,10 +1,9 @@
-
 use std::{fs, path::Path};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use wireguard_keys::Privkey;
 
-pub fn generate_config(fingerpint:String) -> serde_json::Value{
+pub fn generate_config(fingerpint: String) -> serde_json::Value {
     let private_key = Privkey::generate();
     println!("Clé privée générée : {}", private_key.to_base64());
     json!({

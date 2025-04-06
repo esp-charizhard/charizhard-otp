@@ -1,21 +1,27 @@
-use std::{collections::HashMap, error::Error, fs::{File, OpenOptions}, io::{BufReader, BufWriter}, net::Ipv4Addr, path::Path};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs::{File, OpenOptions},
+    io::{BufReader, BufWriter},
+    net::Ipv4Addr,
+    path::Path,
+};
 
 use hyper::StatusCode;
-use serde::{Serialize, Deserialize};
-use serde_json::{from_reader, to_writer_pretty, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, from_reader, to_writer_pretty};
 use urlencoding::encode;
 
-#[derive(Serialize, Deserialize, Debug,Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClientData {
     pub(crate) address: String,
     pub(crate) port: String,
     pub(crate) privkey: String,
     pub(crate) pubkey: String,
     pub(crate) allowedip: String,
-    pub(crate) allowedmask: String, 
+    pub(crate) allowedmask: String,
 }
 type ClientMap = HashMap<String, ClientData>;
-
 
 #[derive(Serialize, Deserialize)]
 struct WgConfigServer {
@@ -23,10 +29,16 @@ struct WgConfigServer {
     allowed_ips: String,
 }
 
+#[allow(unused)]
 fn mask_to_cidr(mask: &str) -> Option<u8> {
-    mask.parse::<Ipv4Addr>().ok().map(|ip| ip.octets().iter().fold(0, |acc, &b| acc + b.count_ones() as u8))
+    mask.parse::<Ipv4Addr>().ok().map(|ip| {
+        ip.octets()
+            .iter()
+            .fold(0, |acc, &b| acc + b.count_ones() as u8)
+    })
 }
 
+#[allow(unused)]
 fn format_allowed_ip(ip: &str, mask: &str) -> String {
     match mask_to_cidr(mask) {
         Some(cidr) => format!("{}/{}", ip, cidr),
@@ -34,12 +46,25 @@ fn format_allowed_ip(ip: &str, mask: &str) -> String {
     }
 }
 
+#[allow(unused)]
 pub fn generate_wg_json(wg_config: &Value) -> String {
     if let Some((_, inner_obj)) = wg_config.as_object().and_then(|obj| obj.iter().next()) {
-        let public_key = inner_obj.get("pubkey").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let allowed_ip = inner_obj.get("allowedip").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let allowed_mask = inner_obj.get("allowedmask").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        
+        let public_key = inner_obj
+            .get("pubkey")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let allowed_ip = inner_obj
+            .get("allowedip")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let allowed_mask = inner_obj
+            .get("allowedmask")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+
         let allowed_ips = if !allowed_ip.is_empty() && !allowed_mask.is_empty() {
             format_allowed_ip(&allowed_ip, &allowed_mask)
         } else {
@@ -56,7 +81,6 @@ pub fn generate_wg_json(wg_config: &Value) -> String {
     "{}".to_string()
 }
 
-
 pub async fn load_and_parse_json(file_path: &str, id_client_x_value: &str) -> (StatusCode, String) {
     let file_result = async_fs::read_to_string(file_path).await;
 
@@ -65,25 +89,33 @@ pub async fn load_and_parse_json(file_path: &str, id_client_x_value: &str) -> (S
             match parse_client_json(&contents, id_client_x_value) {
                 Ok(client_data) => {
                     println!("Config trouvée : {:?}", client_data);
+
                     let encoded_data = create_urlencoded_data(&client_data);
+
                     //println!("Encoded: {}", encoded_data);
-                    return (StatusCode::OK, encoded_data);
+
+                    (StatusCode::OK, encoded_data)
                 }
                 Err(e) => {
                     println!("Erreur lors du parsing : {}", e);
-                    return (
+
+                    (
                         StatusCode::SERVICE_UNAVAILABLE,
                         "Cannot send you the config".to_string(),
-                    );
+                    )
                 }
             }
         }
         Err(e) => {
-            println!("Erreur lors de la récupération du contenu du fichier : {}", e);
-            return (
+            println!(
+                "Erreur lors de la récupération du contenu du fichier : {}",
+                e
+            );
+
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Cannot send you the config".to_string(),
-            );
+            )
         }
     }
 }
@@ -101,7 +133,7 @@ pub fn parse_client_json(json_str: &str, client_id: &str) -> Result<ClientData, 
 
 pub fn create_urlencoded_data(client_data: &ClientData) -> String {
     let mut data = HashMap::new();
-    
+
     data.insert("address", &client_data.address);
     data.insert("port", &client_data.port);
     data.insert("privkey", &client_data.privkey);
@@ -109,7 +141,7 @@ pub fn create_urlencoded_data(client_data: &ClientData) -> String {
     data.insert("allowedip", &client_data.allowedip);
     data.insert("allowedmask", &client_data.allowedmask);
 
-    let ordered_fields = vec![
+    let ordered_fields = [
         ("address", &client_data.address),
         ("port", &client_data.port),
         ("privkey", &client_data.privkey),
@@ -123,7 +155,6 @@ pub fn create_urlencoded_data(client_data: &ClientData) -> String {
         .map(|(key, value)| format!("{}={}", encode(key), encode(value)))
         .collect::<Vec<String>>()
         .join("&");
-
 
     encoded_data
 }
@@ -144,7 +175,11 @@ pub fn find_x_header(headers: &HashMap<String, String>, header_name: &str) -> Op
 }
 
 #[allow(dead_code)]
-pub fn get_attribute_value(file_path: &Path, id: &str, attribute: &str) -> Result<Option<Value>, Box<dyn Error>> {
+pub fn get_attribute_value(
+    file_path: &Path,
+    id: &str,
+    attribute: &str,
+) -> Result<Option<Value>, Box<dyn Error>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
     let json_data: Value = from_reader(reader)?;
@@ -158,9 +193,19 @@ pub fn get_attribute_value(file_path: &Path, id: &str, attribute: &str) -> Resul
     Ok(None) // L'attribut ou l'ID n'existe pas
 }
 
-pub fn update_json_attribute(file_path: &Path, id: &str, attribute: &str, new_value: Value) -> Result<(), Box<dyn Error>> {
-
-    println!("Opening file '{}' to update attribute '{}' of ID '{}' to value '{:?}'", file_path.display(), attribute, id, new_value);
+pub fn update_json_attribute(
+    file_path: &Path,
+    id: &str,
+    attribute: &str,
+    new_value: Value,
+) -> Result<(), Box<dyn Error>> {
+    println!(
+        "Opening file '{}' to update attribute '{}' of ID '{}' to value '{:?}'",
+        file_path.display(),
+        attribute,
+        id,
+        new_value
+    );
 
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
@@ -172,11 +217,17 @@ pub fn update_json_attribute(file_path: &Path, id: &str, attribute: &str, new_va
         println!("Entry found for ID '{}'", id);
 
         if entry.get(attribute).is_some() {
-            println!("Updating attribute '{}' to value '{:?}'", attribute, new_value);
+            println!(
+                "Updating attribute '{}' to value '{:?}'",
+                attribute, new_value
+            );
             entry[attribute] = new_value;
 
             println!("Writing updated JSON data to file...");
-            let file = OpenOptions::new().write(true).truncate(true).open(file_path)?;
+            let file = OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(file_path)?;
             let writer = BufWriter::new(file);
             to_writer_pretty(writer, &json_data)?;
 
