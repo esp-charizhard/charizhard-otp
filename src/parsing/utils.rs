@@ -160,6 +160,7 @@ pub fn create_urlencoded_data(client_data: &ClientData) -> String {
     encoded_data
 }
 
+#[allow(unused)]
 pub fn list_ids_from_file(file_path: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);

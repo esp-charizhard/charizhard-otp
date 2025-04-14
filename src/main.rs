@@ -3,18 +3,17 @@ use tls::utils::{configure_server_tls, extract_client_certificate};
 mod parsing;
 use hyper::StatusCode;
 use parsing::utils::{
-    find_x_header, generate_wg_json, get_info_from_id_otp, init_db, insert_vpn_config, list_ids_from_db, list_ids_from_file, load_and_parse_from_db, update_db_otp_value
+    find_x_header, generate_wg_json, get_info_from_id_otp, init_db, insert_vpn_config, list_ids_from_db, load_and_parse_from_db, update_db_otp_value
 };
 mod routes;
 use routes::utils::{create_http_response, get_route_path_and_headers, send_request_server};
 mod wireguard;
 use std::collections::HashMap;
-use std::path::Path;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
 use tokio_rustls::TlsAcceptor;
-use wireguard::utils::{generate_config, remove_wg_config};
+use wireguard::utils::{generate_config, remove_wg_config_db};
 use std::env;
 const MAX_CONNECTIONS: usize = 10;
 
@@ -76,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let _ = handle_otp(&mut tls_stream, &headers,pool).await;
                     }
                     "/reset" => {
-                        let _ = handle_reset(&mut tls_stream).await;
+                        let _ = handle_reset(&mut tls_stream,pool).await;
                     }
                     _ => {
                         let response_bytes =
@@ -169,28 +168,23 @@ async fn send_error_response(
 }
 
 async fn handle_reset(
-    tls_stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    tls_stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>, pool:sqlx::PgPool
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(fingerprint) = extract_client_certificate(tls_stream) {
-        let ids = match list_ids_from_file(Path::new("example_json_config.json")) {
-            Ok(ids) => ids,
-            Err(e) => {
-                println!("Erreur : {}", e);
-                vec![]
-            }
-        };
+        let ids = list_ids_from_db(&pool).await?;
         if is_string_in_id(&ids, &fingerprint) {
             println!("trouvé dans le fichier JSON !");
-            if let Err(e) = remove_wg_config(Path::new("example_json_config.json"), &fingerprint) {
-                println!("Erreur lors de la suppression de la config : {}", e);
-                let response_bytes = create_http_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Erreur suppression config",
-                );
-                tls_stream.write_all(&response_bytes).await?;
+            match remove_wg_config_db(&pool, &fingerprint).await {
+                Ok(_) => {
+                    let response_bytes = create_http_response(StatusCode::OK, "Config wipe");
+                    tls_stream.write_all(&response_bytes).await?;
+                }
+                Err(e) => {
+                    eprintln!("Erreur lors de la suppression : {}", e);
+                    let response_bytes = create_http_response(StatusCode::INTERNAL_SERVER_ERROR, "Cannot wipe the config");
+                    tls_stream.write_all(&response_bytes).await?;
+                }
             }
-            let response_bytes = create_http_response(StatusCode::OK, "config wipe");
-            tls_stream.write_all(&response_bytes).await?;
         } else {
             println!("non trouvé dans le fichier JSON.");
             let response_bytes =

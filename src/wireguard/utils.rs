@@ -1,6 +1,7 @@
-use std::{fs, path::Path};
+use std::{error::Error, fs, path::Path};
 
 use serde_json::{Value, json};
+use sqlx::PgPool;
 use wireguard_keys::Privkey;
 
 pub fn generate_config(fingerpint: String) -> serde_json::Value {
@@ -44,7 +45,7 @@ pub fn append_wg_config(file_path: &Path, config: Value) -> std::io::Result<()> 
     println!("Writing updated configuration to file.");
     fs::write(file_path, serde_json::to_string_pretty(&data)?)
 }
-
+#[allow(dead_code)]
 pub fn remove_wg_config(file_path: &Path, client_id: &str) -> std::io::Result<()> {
     let mut data = if file_path.exists() {
         let file_content = fs::read_to_string(file_path)?;
@@ -56,4 +57,19 @@ pub fn remove_wg_config(file_path: &Path, client_id: &str) -> std::io::Result<()
         data.as_object_mut().unwrap().remove(client_id);
     }
     fs::write(file_path, serde_json::to_string_pretty(&data)?)
+}
+
+
+pub async fn remove_wg_config_db(pool: &PgPool, client_id: &str) -> Result<(), Box<dyn Error+ Send + Sync>> {
+    let result = sqlx::query("DELETE FROM wg_config WHERE fingerprint = $1")
+    .bind(client_id)
+    .execute(pool)
+    .await?;
+
+    if result.rows_affected() > 0 {
+        println!("Configuration supprimée pour le client '{}'", client_id);
+    } else {
+        println!("Aucun enregistrement trouvé pour '{}'", client_id);
+    }
+    Ok(())
 }
