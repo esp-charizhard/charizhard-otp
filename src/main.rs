@@ -1,12 +1,14 @@
 mod tls;
+use chrono::Utc;
+use mail::utils::send_email;
 use tls::utils::{configure_server_tls, extract_client_certificate};
 mod parsing;
 use hyper::StatusCode;
 use parsing::utils::{
-    find_x_header, generate_wg_json, get_info_from_id_otp, init_db, insert_vpn_config, list_ids_from_db, load_and_parse_from_db, update_db_otp_value
+    find_x_header, generate_wg_json, get_info_from_id_otp, init_db, insert_vpn_config, list_ids_from_db, list_mail_from_db, list_timestamp_from_db, load_and_parse_from_db, string_to_datetime, update_db_otp_value, write_db_otp_value
 };
 mod routes;
-use routes::utils::{create_http_response, get_route_path_and_headers, send_request_server};
+use routes::utils::{create_http_response, generate_otp, get_route_path_and_headers, send_request_server};
 mod wireguard;
 use std::collections::HashMap;
 use tokio::io::AsyncWriteExt;
@@ -14,6 +16,7 @@ use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
 use tokio_rustls::TlsAcceptor;
 use wireguard::utils::{generate_config, remove_wg_config_db};
+mod mail;
 use std::env;
 const MAX_CONNECTIONS: usize = 10;
 
@@ -74,6 +77,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "/otp" => {
                         let _ = handle_otp(&mut tls_stream, &headers,pool).await;
                     }
+                    "/gen_otp" => {
+                        let _ = handle_gen_otp(&mut tls_stream, &headers,pool).await;
+                    }
                     "/reset" => {
                         let _ = handle_reset(&mut tls_stream,pool).await;
                     }
@@ -110,7 +116,7 @@ async fn handle_otp(
     pool:sqlx::PgPool
 ) -> Result<(), Box<dyn std::error::Error>> {
     //println!("Handling OTP");
-    let (otp_value, _mail_value) = match (
+    let (otp_value, mail_value) = match (
         find_x_header(headers, "otp"),
         find_x_header(headers, "mail"),
     ) {
@@ -128,11 +134,22 @@ async fn handle_otp(
     };
     //println!("Verif header ok");
     let ids = list_ids_from_db(&pool).await?;
-    if !is_string_in_id(&ids, &otp_value) || !get_info_from_id_otp(&pool, &otp_value).await?.is_none() {
+    let mails = list_mail_from_db(&pool).await?;
+    if !is_string_in_id(&ids, &otp_value) || !get_info_from_id_otp(&pool, &otp_value).await?.is_none() || !is_string_in_id(&mails, &mail_value) {
         send_error_response(stream, StatusCode::FORBIDDEN, "Invalid OTP or already set").await?;
         return Ok(());
     }
-    
+    let valid_until=list_timestamp_from_db(&pool,&mail_value).await?;
+    println!("valid_until: {:?}", valid_until);
+    if Utc::now() > string_to_datetime(&valid_until[0]).await? {
+        send_error_response(
+            stream,
+            StatusCode::FORBIDDEN,
+            "otp expired",
+        )
+        .await?;
+        return Ok(());
+    }
     let fingerprint =
         extract_client_certificate(stream).ok_or("Client certificate extraction failed")?;
 
@@ -203,4 +220,32 @@ async fn handle_reset(
 }
 fn is_string_in_id(ids: &[String], search_str: &str) -> bool {
     ids.iter().any(|id| id == search_str)
+    
+}
+
+
+
+async fn handle_gen_otp(
+    tls_stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    headers: &HashMap<String, String>,
+    pool:sqlx::PgPool
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mail_value = find_x_header(headers, "mail");
+    println!("mail_value: {:?}",mail_value);
+    let mails = list_mail_from_db(&pool).await?;
+    if let Some(mail_value) = mail_value {
+        if !is_string_in_id(&mails, mail_value.as_str()) {
+            let response_bytes =
+                create_http_response(StatusCode::FORBIDDEN, "Erreur recherche bdd");
+            tls_stream.write_all(&response_bytes).await?;
+        }
+        println!("Generating OTP Value");
+        let otp_value = generate_otp().await;
+        println!("OTP Value: {:?}", otp_value);
+        write_db_otp_value(&pool, &otp_value, &mail_value).await?;
+        send_email(&mail_value, &otp_value).await?;
+        let response_bytes = create_http_response(StatusCode::OK, "Sending MAIL , please check your inbox");
+        tls_stream.write_all(&response_bytes).await?;
+    }
+    Ok(())
 }

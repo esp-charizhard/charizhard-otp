@@ -23,3 +23,5 @@ wireguard-keys = "0.1"
 lazy_static = "1.5"
 sqlx = { version = "0.8.4", features = ["runtime-tokio","postgres"]}
 dotenvy = "0.15.7"
+chrono = "0.4.40"
+lettre = "0.11.15"

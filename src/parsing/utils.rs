@@ -1,10 +1,5 @@
 use std::{
-    collections::HashMap,
-    error::Error,
-    fs::{File, OpenOptions},
-    io::{BufReader, BufWriter},
-    net::Ipv4Addr,
-    path::Path,
+    cmp::Ordering, collections::HashMap, error::Error, fs::{File, OpenOptions}, io::{BufReader, BufWriter}, net::Ipv4Addr, path::Path
 };
 
 use hyper::StatusCode;
@@ -12,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, from_reader, to_writer_pretty};
 use sqlx::{PgPool,Row};
 use urlencoding::encode;
+use chrono::{DateTime, Duration, NaiveDateTime, ParseError, Utc,TimeZone,};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClientData {
@@ -263,6 +259,24 @@ pub async fn list_ids_from_db(db_pool: &PgPool) -> Result<Vec<String>, Box<dyn E
     Ok(ids)
 }
 
+pub async fn list_mail_from_db(db_pool: &PgPool) -> Result<Vec<String>, Box<dyn Error>> {
+    let rows = sqlx::query("SELECT mail FROM users")
+        .fetch_all(db_pool)
+        .await?;
+    let ids: Vec<String> = rows.into_iter().map(|row| row.get("mail")).collect();
+    
+    Ok(ids)
+}
+pub async fn list_timestamp_from_db(db_pool: &PgPool,user: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    let rows = sqlx::query("SELECT valid_until FROM users WHERE mail = $1")
+        .bind(user)
+        .fetch_all(db_pool)
+        .await?;
+    let ids: Vec<String> = rows.into_iter().map(|row| row.get("valid_until")).collect();
+    
+    Ok(ids)
+}
+
 pub async fn get_info_from_id_otp(db_pool: &PgPool, id: &str) -> Result<Option<String>, Box<dyn Error>> {
     let row = sqlx::query("SELECT is_set FROM users WHERE id = $1")
         .bind(id)
@@ -283,6 +297,18 @@ pub async fn update_db_otp_value(pool: &PgPool, id: &str, new_is_set_value: &str
     let _ = sqlx::query("UPDATE users SET is_set = $1 WHERE id = $2")
         .bind(new_is_set_value)
         .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn write_db_otp_value(pool: &PgPool, id: &str, mail: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let otp_expiry = Utc::now() + Duration::minutes(5);
+    let otp_expiry_str = otp_expiry.format("%Y-%m-%d %H:%M:%S").to_string();
+    let _ = sqlx::query("UPDATE users SET id = $1, valid_until = $2 WHERE mail = $3")
+        .bind(id)
+        .bind(otp_expiry_str)
+        .bind(mail)
         .execute(pool)
         .await?;
     Ok(())
@@ -347,4 +373,12 @@ pub async fn load_and_parse_from_db(pool: &PgPool, id_client_x_value: &str) -> (
         }
     }
     
+}
+
+
+pub async fn string_to_datetime(date_str: &str) -> Result<DateTime<Utc>, ParseError> {
+    let naive_datetime = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S")?;
+    let datetime_utc = Utc.from_utc_datetime(&naive_datetime);
+    
+    Ok(datetime_utc)
 }

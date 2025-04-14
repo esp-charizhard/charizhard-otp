@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use hyper::StatusCode;
 use reqwest::Client;
 use tokio::io::AsyncReadExt;
-
+use rand::{rng, Rng};
 /// Extract the path from an HTTP request.
 ///
 /// The function reads the request line by line and tries to extract the path from the first line.
@@ -96,4 +96,12 @@ pub async fn send_request_server(endpoint: &str, json_data: &str) -> Result<(), 
 
     println!("Response status: {}", response.status());
     Ok(())
+}
+
+
+
+pub async fn generate_otp() -> String {
+    let mut rng = rng();
+    let code: u32 = rng.random_range(100_000_000..1_000_000_000); 
+    code.to_string()
 }
