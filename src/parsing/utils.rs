@@ -10,6 +10,7 @@ use std::{
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, from_reader, to_writer_pretty};
+use sqlx::{PgPool,Row};
 use urlencoding::encode;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -80,7 +81,7 @@ pub fn generate_wg_json(wg_config: &Value) -> String {
     }
     "{}".to_string()
 }
-
+#[allow(unused)]
 pub async fn load_and_parse_json(file_path: &str, id_client_x_value: &str) -> (StatusCode, String) {
     let file_result = async_fs::read_to_string(file_path).await;
 
@@ -170,6 +171,9 @@ pub fn list_ids_from_file(file_path: &Path) -> Result<Vec<String>, Box<dyn std::
     Err("Le fichier JSON n'est pas un objet valide.".into())
 }
 
+
+
+
 pub fn find_x_header(headers: &HashMap<String, String>, header_name: &str) -> Option<String> {
     headers.get(header_name).cloned()
 }
@@ -192,7 +196,7 @@ pub fn get_attribute_value(
 
     Ok(None) // L'attribut ou l'ID n'existe pas
 }
-
+#[allow(dead_code)]
 pub fn update_json_attribute(
     file_path: &Path,
     id: &str,
@@ -241,4 +245,105 @@ pub fn update_json_attribute(
     }
 
     Err("ID ou attribut non trouvé dans le fichier JSON.".into())
+}
+
+
+pub async fn init_db(db_url: &str) -> Result<PgPool, Box<dyn Error>> {
+    let pool = PgPool::connect(db_url).await?;
+    Ok(pool)
+}
+
+pub async fn list_ids_from_db(db_pool: &PgPool) -> Result<Vec<String>, Box<dyn Error>> {
+    let rows = sqlx::query("SELECT id FROM users")
+        .fetch_all(db_pool)
+        .await?;
+    let ids: Vec<String> = rows.into_iter().map(|row| row.get("id")).collect();
+    
+    Ok(ids)
+}
+
+pub async fn get_info_from_id_otp(db_pool: &PgPool, id: &str) -> Result<Option<String>, Box<dyn Error>> {
+    let row = sqlx::query("SELECT is_set FROM users WHERE id = $1")
+        .bind(id)
+        .fetch_optional(db_pool)
+        .await?;
+    
+        if let Some(r) = row {
+            let is_set: Option<String> = r.try_get("is_set")?;
+            Ok(is_set)
+        } else {
+            Ok(None)
+        }
+}
+
+
+
+pub async fn update_db_otp_value(pool: &PgPool, id: &str, new_is_set_value: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let _ = sqlx::query("UPDATE users SET is_set = $1 WHERE id = $2")
+        .bind(new_is_set_value)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+
+
+pub async fn insert_vpn_config(pool: &PgPool, config: Value) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some((fingerprint, cfg)) = config.as_object().and_then(|obj| obj.iter().next()) {
+        let address = cfg.get("address").and_then(|v| v.as_str()).unwrap_or_default();
+        let port = cfg.get("port").and_then(|v| v.as_str()).unwrap_or_default();
+        let privkey = cfg.get("privkey").and_then(|v| v.as_str()).unwrap_or_default();
+        let pubkey = cfg.get("pubkey").and_then(|v| v.as_str()).unwrap_or_default();
+        let allowedip = cfg.get("allowedip").and_then(|v| v.as_str()).unwrap_or_default();
+        let allowedmask = cfg.get("allowedmask").and_then(|v| v.as_str()).unwrap_or_default();
+
+        let _ = sqlx::query(
+            "INSERT INTO wg_config (fingerprint, address, port, privkey, pubkey, allowedip, allowedmask)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        )
+        .bind(fingerprint)
+        .bind(address)
+        .bind(port)
+        .bind(privkey)
+        .bind(pubkey)
+        .bind(allowedip)
+        .bind(allowedmask)
+        .execute(pool)
+        .await?;
+        
+    }
+    Ok(())
+}
+
+
+pub async fn load_and_parse_from_db(pool: &PgPool, id_client_x_value: &str) -> (StatusCode, String) {
+    let row = sqlx::query("SELECT  address, port, privkey, pubkey, allowedip, allowedmask FROM wg_config WHERE fingerprint = $1")
+    .bind(id_client_x_value)
+    .fetch_optional(pool)
+    .await;
+
+    match row {
+        Ok(Some(record)) => {
+            let config = ClientData {
+                address: record.get("address"),
+                port: record.get("port"),
+                privkey: record.get("privkey"),
+                pubkey: record.get("pubkey"),
+                allowedip: record.get("allowedip"),
+                allowedmask: record.get("allowedmask"),
+            };
+            let encoded_data = create_urlencoded_data(&config);
+            (StatusCode::OK, encoded_data)
+        }
+        Ok(None) => {
+            println!("Aucun résultat pour l'ID fourni");
+            (StatusCode::FORBIDDEN, "Cannot send you the config".to_string())
+        }
+        Err(e) => {
+            println!("Erreur lors de la requête SQL : {:?}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
+        }
+    }
+    
 }

@@ -3,20 +3,19 @@ use tls::utils::{configure_server_tls, extract_client_certificate};
 mod parsing;
 use hyper::StatusCode;
 use parsing::utils::{
-    find_x_header, list_ids_from_file, load_and_parse_json, update_json_attribute,
+    find_x_header, generate_wg_json, get_info_from_id_otp, init_db, insert_vpn_config, list_ids_from_db, list_ids_from_file, load_and_parse_from_db, update_db_otp_value
 };
 mod routes;
-use routes::utils::{create_http_response, get_route_path_and_headers};
+use routes::utils::{create_http_response, get_route_path_and_headers, send_request_server};
 mod wireguard;
-use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
 use tokio_rustls::TlsAcceptor;
-use wireguard::utils::{append_wg_config, generate_config, remove_wg_config};
-
+use wireguard::utils::{generate_config, remove_wg_config};
+use std::env;
 const MAX_CONNECTIONS: usize = 10;
 
 lazy_static::lazy_static! {
@@ -25,11 +24,15 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenvy::dotenv()?;
     let tls_config = configure_server_tls(
         "temp_certif/certif_charizhard.crt",
         "temp_certif/key_charizhard.key",
         "temp_certif/ca.crt",
     );
+    
+
+
     let acceptor = TlsAcceptor::from(tls_config.clone());
     let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();
     println!("Serveur HTTPS en écoute sur https://0.0.0.0:8443");
@@ -62,13 +65,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         return;
                     }
                 };
+            let database_url = env::var("DATABASE_URL").unwrap();
+            let pool = init_db(&database_url).await.unwrap();
             match get_route_path_and_headers(&mut tls_stream).await {
                 Some((path, headers)) => match path.as_str() {
                     "/configwg" => {
-                        let _ = handle_configwg(&mut tls_stream).await;
+                        let _ = handle_configwg(&mut tls_stream,pool).await;
                     }
                     "/otp" => {
-                        let _ = handle_otp(&mut tls_stream, &headers).await;
+                        let _ = handle_otp(&mut tls_stream, &headers,pool).await;
                     }
                     "/reset" => {
                         let _ = handle_reset(&mut tls_stream).await;
@@ -88,13 +93,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn handle_configwg(
-    stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,pool:sqlx::PgPool
 ) -> Result<(), Box<dyn std::error::Error>> {
     let fingerprint =
         extract_client_certificate(stream).ok_or("Client certificate extraction failed")?;
 
-    let (status, response_body) =
-        load_and_parse_json("example_json_config.json", &fingerprint).await;
+    let (status, response_body) = load_and_parse_from_db(&pool,&fingerprint).await;
     let response_bytes = create_http_response(status, &response_body);
 
     stream.write_all(&response_bytes).await?;
@@ -104,8 +108,9 @@ async fn handle_configwg(
 async fn handle_otp(
     stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     headers: &HashMap<String, String>,
+    pool:sqlx::PgPool
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Handling OTP");
+    //println!("Handling OTP");
     let (otp_value, _mail_value) = match (
         find_x_header(headers, "otp"),
         find_x_header(headers, "mail"),
@@ -122,40 +127,32 @@ async fn handle_otp(
             return Ok(());
         }
     };
-    println!("Verif header ok");
-    let ids = list_ids_from_file(Path::new("otp.json"))?;
-    if !is_string_in_id(&ids, &otp_value) {
-        send_error_response(stream, StatusCode::FORBIDDEN, "Invalid OTP").await?;
+    //println!("Verif header ok");
+    let ids = list_ids_from_db(&pool).await?;
+    if !is_string_in_id(&ids, &otp_value) || !get_info_from_id_otp(&pool, &otp_value).await?.is_none() {
+        send_error_response(stream, StatusCode::FORBIDDEN, "Invalid OTP or already set").await?;
         return Ok(());
     }
-    println!("Verif OTP ok");
+    
     let fingerprint =
         extract_client_certificate(stream).ok_or("Client certificate extraction failed")?;
-    println!("Fingerprint ok");
 
-    update_json_attribute(
-        Path::new("otp.json"),
-        &otp_value,
-        "is_set",
-        Value::from(fingerprint.clone()),
-    )?;
-    println!("modified is_set from json");
+    update_db_otp_value(&pool, &otp_value, &fingerprint).await?;
     let wg_config = generate_config(fingerprint.clone());
-    println!("wg_config JSON: {}", wg_config);
-
-    match append_wg_config(Path::new("example_json_config.json"), wg_config.clone()) {
-        Ok(_) => println!("Configuration ajoutée avec succès."),
-        Err(e) => eprintln!("Erreur lors de l'ajout de la configuration: {}", e),
+    //println!("wg_config JSON: {}", wg_config);
+    if let Err(e) = insert_vpn_config(&pool, wg_config.clone()).await {
+        eprintln!("Erreur lors de l'insertion dans vpn_config: {}", e);
     }
-    println!("appended is_set from json");
-
-    // let json_to_send = generate_wg_json(&wg_config);
-    // send_request_server("https://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await?;
-
-    println!("Sending config");
-
-    let (status, response_body) =
-        load_and_parse_json("example_json_config.json", &fingerprint).await;
+    //println!("appended is_set from json");
+    let json_to_send = generate_wg_json(&wg_config);
+    //println!("JSON to send: {}", json_to_send);
+    match send_request_server("https://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await {
+        Ok(_) => println!("Requête envoyée avec succès"),
+        Err(e) => eprintln!("Erreur lors de l'envoi de la requête : {}", e),
+    }
+    let (status, response_body) = load_and_parse_from_db(&pool,&fingerprint).await;
+    // let (status, response_body) =
+    //     load_and_parse_json("example_json_config.json", &fingerprint).await;
     let response_bytes = create_http_response(status, &response_body);
     stream.write_all(&response_bytes).await?;
 

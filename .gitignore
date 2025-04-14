@@ -9,3 +9,5 @@ charizhard-otp-cm1-configmap.yaml
 charizhard-otp-cm2-configmap.yaml
 charizhard-otp-deployment.yaml
 charizhard-otp-service.yaml
+init.sql
+.env
