@@ -135,8 +135,8 @@ async fn handle_otp(
     //println!("Verif header ok");
     let ids = list_ids_from_db(&pool).await?;
     let mails = list_mail_from_db(&pool).await?;
-    if !is_string_in_id(&ids, &otp_value) || !get_info_from_id_otp(&pool, &otp_value).await?.is_none() || !is_string_in_id(&mails, &mail_value) {
-        send_error_response(stream, StatusCode::FORBIDDEN, "Invalid OTP or already set").await?;
+    if !is_string_in_id(&ids, &otp_value) || !is_string_in_id(&mails, &mail_value) {
+        send_error_response(stream, StatusCode::FORBIDDEN, "Invalid OTP/MAIL or already set").await?;
         return Ok(());
     }
     let valid_until=list_timestamp_from_db(&pool,&mail_value).await?;
@@ -150,8 +150,15 @@ async fn handle_otp(
         .await?;
         return Ok(());
     }
-    let fingerprint =
-        extract_client_certificate(stream).ok_or("Client certificate extraction failed")?;
+    let fingerprint = extract_client_certificate(stream).ok_or("Client certificate extraction failed")?;
+    if !get_info_from_id_otp(&pool, &otp_value).await?.is_none(){
+        println!("You already got a config , sending u the right one");
+        let (status, response_body) = load_and_parse_from_db(&pool,&fingerprint.clone()).await;
+        let response_bytes = create_http_response(status, &response_body);
+    
+        stream.write_all(&response_bytes).await?;
+    }
+   
 
     update_db_otp_value(&pool, &otp_value, &fingerprint).await?;
     let wg_config = generate_config(fingerprint.clone());

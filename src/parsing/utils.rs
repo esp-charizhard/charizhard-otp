@@ -1,5 +1,5 @@
 use std::{
-    cmp::Ordering, collections::HashMap, error::Error, fs::{File, OpenOptions}, io::{BufReader, BufWriter}, net::Ipv4Addr, path::Path
+    collections::HashMap, error::Error, fs::{File, OpenOptions}, io::{BufReader, BufWriter}, net::Ipv4Addr, path::Path
 };
 
 use hyper::StatusCode;

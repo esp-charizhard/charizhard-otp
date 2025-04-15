@@ -10,7 +10,7 @@ pub async fn send_email(dest: &str,otp_code : &str) -> Result<(), Box<dyn std::e
 
     let email = Message::builder()
     .from(sender_email.parse()?)
-    .to(dest.parse()?)
+    .to(sender_email.parse()?)//TODO MODIF POUR LE BON EMAIL (DEBUG)
     .subject(subject)
     .singlepart(SinglePart::plain(otp_code.to_string()))?;
 
