@@ -27,11 +27,13 @@ lazy_static::lazy_static! {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv()?;
+    println!("Loaded env vars");
     let tls_config = configure_server_tls(
         "temp_certif/certif_charizhard.crt",
         "temp_certif/key_charizhard.key",
         "temp_certif/ca.crt",
     );
+    println!("Loaded certif");
     
 
 
@@ -58,8 +60,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     Ok(Err(e)) => {
                         eprintln!("Échec TLS: {}", e);
-                        // let response_bytes = create_http_response(StatusCode::INTERNAL_SERVER_ERROR, "Erreuyr");
-                        // let _ = tls_stream.write_all(&response_bytes).await;
                         return;
                     }
                     Err(_) => {
