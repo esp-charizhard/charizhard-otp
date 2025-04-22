@@ -26,11 +26,11 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    match std::env::var("POSTGRES_PASSWORD") {
-        Ok(val) => println!("POSTGRES_PASSWORD: {}", val),
-        Err(e) => println!("POSTGRES_PASSWORD is not set: {}", e),
-    }
-    dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
+    // match std::env::var("POSTGRES_PASSWORD") {
+    //     Ok(val) => println!("POSTGRES_PASSWORD: {}", val),
+    //     Err(e) => println!("POSTGRES_PASSWORD is not set: {}", e),
+    // }
+    // dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
     println!("Loaded env vars");
     let tls_config = configure_server_tls(
         "temp_certif/certif_charizhard.crt",
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         return;
                     }
                 };
-            let database_url = env::var("DATABASE_URL").unwrap();
+            let database_url = std::env::var("DATABASE_URL").unwrap();
             let pool = init_db(&database_url).await.unwrap();
             match get_route_path_and_headers(&mut tls_stream).await {
                 Some((path, headers)) => match path.as_str() {

@@ -4,8 +4,8 @@ use lettre::{message::SinglePart, transport::smtp::authentication::Credentials, 
 use lettre::{SmtpTransport, Transport};
 
 pub async fn send_email(dest: &str,otp_code : &str) -> Result<(), Box<dyn std::error::Error>> {
-    let sender_email =env::var("EMAIL_LOGIN").unwrap(); 
-    let sender_password = env::var("EMAIl_PASSWORD").unwrap(); 
+    let sender_email =std::env::var("EMAIL_LOGIN").unwrap(); 
+    let sender_password = std::env::var("EMAIl_PASSWORD").unwrap(); 
     let subject = "YOUR OTP CODE"; 
 
     let email = Message::builder()
