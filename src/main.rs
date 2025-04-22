@@ -243,7 +243,7 @@ async fn handle_gen_otp(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mail_value = find_x_header(headers, "mail");
     println!("mail_value: {:?}",mail_value);
-    let mails = list_mail_from_db(&pool).await?;
+    let mails = list_mail_from_db(&pool).await.expect("Erreur list_mail_from_db");
     if let Some(mail_value) = mail_value {
         if !is_string_in_id(&mails, mail_value.as_str()) {
             let response_bytes =
@@ -253,8 +253,8 @@ async fn handle_gen_otp(
         println!("Generating OTP Value");
         let otp_value = generate_otp().await;
         println!("OTP Value: {:?}", otp_value);
-        write_db_otp_value(&pool, &otp_value, &mail_value).await?;
-        send_email(&mail_value, &otp_value).await?;
+        write_db_otp_value(&pool, &otp_value, &mail_value).await.expect("Erreur write_db_otp_value");
+        send_email(&mail_value, &otp_value).await.expect("Erreur sending mail");
         let response_bytes = create_http_response(StatusCode::OK, "Sending MAIL , please check your inbox");
         tls_stream.write_all(&response_bytes).await?;
     }
