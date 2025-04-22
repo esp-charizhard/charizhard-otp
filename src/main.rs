@@ -26,7 +26,7 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenvy::dotenv()?;
+    dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
     println!("Loaded env vars");
     let tls_config = configure_server_tls(
         "temp_certif/certif_charizhard.crt",
