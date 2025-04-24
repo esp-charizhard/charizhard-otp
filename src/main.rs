@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     Ok(val) => println!("POSTGRES_PASSWORD: {}", val),
     //     Err(e) => println!("POSTGRES_PASSWORD is not set: {}", e),
     // }
-    dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
+    //dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
     println!("Loaded env vars");
     let tls_config = configure_server_tls(
         "temp_certif/certif_charizhard.crt",
