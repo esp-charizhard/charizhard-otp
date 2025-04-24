@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     Ok(val) => println!("POSTGRES_PASSWORD: {}", val),
     //     Err(e) => println!("POSTGRES_PASSWORD is not set: {}", e),
     // }
-    //dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
+    dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
     println!("Loaded env vars");
     let tls_config = configure_server_tls(
         "temp_certif/certif_charizhard.crt",
@@ -172,7 +172,7 @@ async fn handle_otp(
     //println!("appended is_set from json");
     let json_to_send = generate_wg_json(&wg_config);
     //println!("JSON to send: {}", json_to_send);
-    match send_request_server("https://charizhard-wg.duckdns.org:8081/add-peer", &json_to_send).await {
+    match send_request_server(std::env::var("ENDPOINT_WG").unwrap().as_str(), &json_to_send).await {
         Ok(_) => println!("Requête envoyée avec succès"),
         Err(e) => eprintln!("Erreur lors de l'envoi de la requête : {}", e),
     }
