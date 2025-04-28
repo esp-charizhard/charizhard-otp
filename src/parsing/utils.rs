@@ -305,10 +305,14 @@ pub async fn update_db_otp_value(pool: &PgPool, id: &str, new_is_set_value: &str
 pub async fn write_db_otp_value(pool: &PgPool, id: &str, mail: &str) -> Result<(), Box<dyn std::error::Error>> {
     let otp_expiry = Utc::now() + Duration::minutes(5);
     let otp_expiry_str = otp_expiry.format("%Y-%m-%d %H:%M:%S").to_string();
-    let _ = sqlx::query("UPDATE users SET id = $1, valid_until = $2 WHERE mail = $3")
+    let _ = sqlx::query( "INSERT INTO users (mail, id, valid_until)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (mail) DO UPDATE 
+    SET id = EXCLUDED.id,
+        valid_until = EXCLUDED.valid_until")
+        .bind(mail)
         .bind(id)
         .bind(otp_expiry_str)
-        .bind(mail)
         .execute(pool)
         .await?;
     Ok(())

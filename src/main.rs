@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     Ok(val) => println!("POSTGRES_PASSWORD: {}", val),
     //     Err(e) => println!("POSTGRES_PASSWORD is not set: {}", e),
     // }
-    // dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
+    dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
     println!("Loaded env vars");
     let tls_config = configure_server_tls(
         "temp_certif/certif_charizhard.crt",
@@ -242,20 +242,21 @@ async fn handle_gen_otp(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mail_value = find_x_header(headers, "mail");
     println!("mail_value: {:?}",mail_value);
-    let mails = list_mail_from_db(&pool).await.expect("Erreur list_mail_from_db");
+    //let mails = list_mail_from_db(&pool).await.expect("Erreur list_mail_from_db");
     if let Some(mail_value) = mail_value {
-        if !is_string_in_id(&mails, mail_value.as_str()) {
-            let response_bytes =
-                create_http_response(StatusCode::FORBIDDEN, "Erreur recherche bdd");
+        if mail_value.ends_with("@isen.yncrea.fr") || mail_value.ends_with("@navalgroup.com") || mail_value.ends_with("@gmail.com"){
+            println!("Generating OTP Value");
+            let otp_value = generate_otp().await;
+            println!("OTP Value: {:?}", otp_value);
+            write_db_otp_value(&pool, &otp_value, &mail_value).await.expect("Erreur write_db_otp_value");
+            send_email(&mail_value, &otp_value).await.expect("Erreur sending mail");
+            let response_bytes = create_http_response(StatusCode::OK, "Sending MAIL , please check your inbox");
+            tls_stream.write_all(&response_bytes).await?;
+        } else {
+            let response_bytes = create_http_response(StatusCode::UNPROCESSABLE_ENTITY, "Not allowed");
             tls_stream.write_all(&response_bytes).await?;
         }
-        println!("Generating OTP Value");
-        let otp_value = generate_otp().await;
-        println!("OTP Value: {:?}", otp_value);
-        write_db_otp_value(&pool, &otp_value, &mail_value).await.expect("Erreur write_db_otp_value");
-        send_email(&mail_value, &otp_value).await.expect("Erreur sending mail");
-        let response_bytes = create_http_response(StatusCode::OK, "Sending MAIL , please check your inbox");
-        tls_stream.write_all(&response_bytes).await?;
+       
     }
     Ok(())
 }
