@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     Ok(val) => println!("POSTGRES_PASSWORD: {}", val),
     //     Err(e) => println!("POSTGRES_PASSWORD is not set: {}", e),
     // }
-    //dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
+    dotenvy::dotenv().expect("NIQUE TA GRAND MERE");
     println!("Loaded env vars");
     let tls_config = configure_server_tls(
         "temp_certif/certif_charizhard.crt",
@@ -157,9 +157,10 @@ async fn handle_otp(
     if !get_info_from_id_otp(&pool, &otp_value).await?.is_none(){
         println!("You already got a config , sending u the right one");
         let (status, response_body) = load_and_parse_from_db(&pool,&fingerprint.clone()).await;
+        println!("Status : {:?}, reponse body : {:?}",status,response_body);
         let response_bytes = create_http_response(status, &response_body);
-    
         stream.write_all(&response_bytes).await?;
+        return Ok(());
     }
    
 
