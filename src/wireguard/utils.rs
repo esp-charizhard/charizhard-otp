@@ -10,7 +10,7 @@ pub fn generate_config(fingerpint: String) -> serde_json::Value {
     json!({
         fingerpint: {
             "address": "charizhard-wg.duckdns.org",
-            "port": "51820",
+            "port": "51825",
             "privkey": private_key,
             "pubkey": "nwkXWjc5q1NsGh6y9Y+1usPcbQzxYviNoqFG5Cl0tXI=",
             "allowedip": "192.168.200.2",
