@@ -244,7 +244,7 @@ async fn handle_gen_otp(
     println!("mail_value: {:?}",mail_value);
     //let mails = list_mail_from_db(&pool).await.expect("Erreur list_mail_from_db");
     if let Some(mail_value) = mail_value {
-        if mail_value.ends_with("@isen.yncrea.fr") || mail_value.ends_with("@navalgroup.com") || mail_value.ends_with("@gmail.com"){
+        if mail_value.ends_with("@isen.yncrea.fr") || mail_value.ends_with("@navalgroup.com") || mail_value.ends_with("@gmail.com") || mail_value.ends_with("@pm.me"){
             println!("Generating OTP Value");
             let otp_value = generate_otp().await;
             println!("OTP Value: {:?}", otp_value);
