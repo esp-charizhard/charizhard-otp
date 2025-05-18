@@ -44,6 +44,35 @@ cargo build --release
 ./target/release/charizhard-otp
 ```
 
+## 🛠 Usage
+
+Once the server is running, you can interact with it to generate and validate OTPs as part of your authentication workflow.
+
+### OTP Generation (`/gen_otp` endpoint):
+
+- To generate an OTP, send a request to the `/gen_otp` endpoint.
+- The communication must be done over **mTLS (mutual TLS)**, using certificates managed by the server's own CA or the company's private CA.
+- You **must include the user’s email address in the request headers**.
+- The email address must belong to the company domain (e.g., `@pm.me`).
+- If the email is verified to belong to the company domain, the server will generate an OTP and send it to the user's email address securely (TLS).
+
+### OTP Validation (`/otp` endpoint):
+
+- When the user receives the OTP, they submit it to the `/otp` endpoint for validation.
+- The request **must include the user’s email address and the OTP in the headers**.
+- The email provided must correspond to the one associated with the OTP.
+- Upon successful validation, the server will securely send a WireGuard VPN configuration file over the TLS-encrypted connection.
+- The user can then use this configuration to connect to the company VPN infrastructure.
+
+### Configuration Reset (`/reset` endpoint):
+
+- The server provides a `/reset` endpoint to wipe the VPN configuration associated with a user.
+- This operation requires that the client authenticates via mTLS.
+- The server verifies that the client certificate used for the TLS connection matches the certificate tied to the user’s VPN configuration.
+- If the certificates match, the server securely deletes the user’s VPN configuration, effectively revoking their VPN access.
+
+
+
 ## License
 
 [GNU GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.fr.html#license-text)
