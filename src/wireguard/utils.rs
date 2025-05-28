@@ -11,7 +11,7 @@ pub fn generate_config(fingerpint: String) -> serde_json::Value {
     println!("Clé public générée : {}", public_key.to_base64());
     json!({
         fingerpint: {
-            "address": "193.52.13.247",
+            "address": "charizhard-wg.duckdns.org",
             "port": "51825",
             "privkey": "kJ09fiJcmyEBIjPkAOEnP2xDXA5X2NrmlYql/duqnHI=",
             "pubkey": "sGWCRcV3lXgyKbx8IQsFTGsJ28KzB28JxIrdmRfoZx8=",
