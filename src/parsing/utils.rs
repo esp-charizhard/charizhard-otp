@@ -325,7 +325,7 @@ pub async fn insert_vpn_config(pool: &PgPool, config: Value) -> Result<(), Box<d
         let address = cfg.get("address").and_then(|v| v.as_str()).unwrap_or_default();
         let port = cfg.get("port").and_then(|v| v.as_str()).unwrap_or_default();
         let privkey = cfg.get("privkey").and_then(|v| v.as_str()).unwrap_or_default();
-        let pubkey = cfg.get("pubkey").and_then(|v| v.as_str()).unwrap_or_default();
+        let pubkey = cfg.get("pubkey_serv").and_then(|v| v.as_str()).unwrap_or_default();
         let allowedip = cfg.get("allowedip").and_then(|v| v.as_str()).unwrap_or_default();
         let allowedmask = cfg.get("allowedmask").and_then(|v| v.as_str()).unwrap_or_default();
 

@@ -6,13 +6,16 @@ use wireguard_keys::Privkey;
 
 pub fn generate_config(fingerpint: String) -> serde_json::Value {
     let private_key = Privkey::generate();
+    let public_key = private_key.pubkey();
     println!("Clé privée générée : {}", private_key.to_base64());
+    println!("Clé public générée : {}", public_key.to_base64());
     json!({
         fingerpint: {
-            "address": "charizhard-wg.duckdns.org",
+            "address": "193.52.13.247",
             "port": "51825",
             "privkey": private_key,
-            "pubkey": "nwkXWjc5q1NsGh6y9Y+1usPcbQzxYviNoqFG5Cl0tXI=",
+            "pubkey": public_key,
+            "pubkey_serv": "nwkXWjc5q1NsGh6y9Y+1usPcbQzxYviNoqFG5Cl0tXI=",
             "allowedip": "192.168.200.2",
             "allowedmask": "255.255.255.255"
         }
