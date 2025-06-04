@@ -16,7 +16,7 @@ pub fn generate_config(fingerpint: String) -> serde_json::Value {
             "privkey": private_key,
             "pubkey": public_key,
             "pubkey_serv": "nwkXWjc5q1NsGh6y9Y+1usPcbQzxYviNoqFG5Cl0tXI=",
-            "allowedip": "192.168.200.2",
+            "allowedip": "192.168.100.2",
             "allowedmask": "255.255.255.255"
         }
     })
